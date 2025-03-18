@@ -1,0 +1,8 @@
+api.key
+endpoint.key
+fibrosis/data/
+src/smolagents
+deseq/data/
+evolution/data
+comparative/data
+*.pyc
