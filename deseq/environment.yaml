@@ -1,0 +1,16 @@
+name: rnaseq
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - sra-tools
+  - fastqc
+  - multiqc
+  - trimmomatic
+  - star
+  - gffread
+  - r-base
+  - bioconductor-deseq2
+  - bioconductor-biocparallel
+  - bioconductor-clusterprofiler
+  - r-ggpubr

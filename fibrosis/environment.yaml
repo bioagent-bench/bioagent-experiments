@@ -1,0 +1,11 @@
+name: fibrosis
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - fastqc
+  - salmon
+  - sra-tools
+  - trimmomatic
+  - star

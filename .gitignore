@@ -5,4 +5,5 @@ src/smolagents
 deseq/data/
 evolution/data
 comparative/data
+metagenomics/data
 *.pyc

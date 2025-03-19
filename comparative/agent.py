@@ -35,7 +35,7 @@ echo 5hygs5nf | sudo -S apt-get install package_name
 """
 
 
-def run_black_box_fibrosis_agent():
+def run_agent():
     model = create_azure_model()
     bioagent = CodeAgent(
         name="bioagent",

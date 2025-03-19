@@ -1,0 +1,23 @@
+# environment.yaml
+name: evolution
+channels:
+  - bioconda
+dependencies:
+  - fastp
+  - fastqc
+  - multiqc
+  - spades
+  - quast
+  - samtools
+  - bwa
+  - qualimap
+  - freebayes
+  - bedtools
+  - vcflib
+  - rtg-tools
+  - bcftools
+  - matplotlib
+  - compleasm
+  - prokka
+  - snpeff
+  - genometools
