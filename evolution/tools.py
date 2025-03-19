@@ -240,3 +240,18 @@ def run_prokka(input_file: str, output_dir: str) -> str:
         ["prokka", "--outdir", output_dir, input_file], capture_output=True, text=True
     )
     return result.stdout + result.stderr
+
+
+bioinformatics_tools = [
+    read_directory_tool,
+    fastqc_tool,
+    run_fastp,
+    run_fastqc,
+    run_spades,
+    run_quast,
+    run_bwa_index,
+    run_bwa_mem,
+    run_samtools_sort,
+    run_freebayes,
+    run_prokka,
+]

@@ -1,53 +1,36 @@
 from smolagents import CodeAgent
 from models import create_azure_model
 import logging
+from tools import bioinformatics_tools
 
 logger = logging.getLogger(__name__)
 
-prompt = """The sample dataset is a simulated dataset for finding the generic 
-cause of Cystic fibrosis. The dataset is real sequencing data from CEPH_1463 
-dataset provided by the Complete Genomics Diversity Panel. It consists of sequencing of a 
-family: 4 grandparents, 2 parents and 11 siblings. A known Mandelian disease mutation has been 
-added on three siblings, taking care to be consistent with the underlying heplotype structure. 
-The goal is to find the mutation causing the mendalian recessive trait - Cystic Fibrosis. 
-The samples with the observed phenotype are NA12885, NA12886, NA12879. Family tree:
-Siblings: NA12879, NA12880, NA12881, NA12882, NA12883, NA12884, NA12885, NA12886, NA12887, NA12888, NA12893
-Parents: NA12877, NA12878
-Parents of NA12877: NA12889, NA12890
-Parents of NA12878: NA12891, NA12892
+prompt = """The datasets consists FASTA sequences and GFF annotations of a microbial genome 
+for Micrococcus. The main goal. The goal of is to do phylogenetic reconstruction of 
+clusters of orthologous co-evolving genes. The COGs needs to be filtered based on the 
+following quality criteria:
+1.No paralogs
+2.Clusters present in all 4 organisms
+3.Only present in the coding regions
+4.Must have at least 1 high confidence annotation.
 
-Think about which steps are necessary to produce this analysis and generate a plan before starting.
-Install all necessary tools and packages to find variants responsible for this pathology.
-The dataset files are provided in the ./fibrosis/data/ directory.
-Provide the output processing and results in the ./fibrosis/outputs/ directory.
-Install all necessary tools and packages, execute the required tools to obtain the variant that explains
-the phenotype. You can wrap command line tool calls with Python code like so:
-result = subprocess.run(
-    ["fastqc", input_file, "-o", output_dir], capture_output=True, text=True
-)
-return {
-    "stdout": result.stdout,
-    "stderr": result.stderr,
-    "returncode": result.returncode,
-}
-You can provide sudo password like so if you need it
-echo 5hygs5nf | sudo -S apt-get install package_name
+The final result is clustering of the co-evolving genes into functional (annotated clusters)
+The dataset files are provided in the ./data directory.
+Provide the output processing and results in the ./outputs directory, for each separate step of
+analysis create an output subdirectory and name them in order for example step_1, step_2, etc...
 """
 
 
-def run_agent():
-    model = create_azure_model()
-    bioagent = CodeAgent(
-        name="bioagent",
-        max_steps=50,
-        model=model,
-        tools=[],
-        planning_interval=3,
-        add_base_tools=True,
-        additional_authorized_imports=["*"],
-        executor_type="local",
-    )
-
-    model = create_azure_model()
-    result = bioagent.run(prompt)
-    print(result)
+model = create_azure_model()
+bioagent = CodeAgent(
+    name="bioagent",
+    max_steps=30,
+    model=model,
+    tools=[bioinformatics_tools],
+    planning_interval=1,
+    add_base_tools=True,
+    additional_authorized_imports=["*"],
+    executor_type="local",
+)
+result = bioagent.run(prompt)
+print(result)

@@ -95,3 +95,11 @@ def annotate_sequences_tool(
         cogs_annot[i] = IdTaxa(current_protein, training_set, processors=None)
         print(f"Completed annotation {i + 1} of {len(matched_sequences)}")
     return cogs_annot
+
+
+bioinformatics_tools = [
+    read_directory_tool,
+    extract_sequences_tool,
+    build_phylogenetic_trees_tool,
+    annotate_sequences_tool,
+]

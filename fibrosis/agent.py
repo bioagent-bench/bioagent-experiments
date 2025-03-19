@@ -1,6 +1,7 @@
 from smolagents import CodeAgent
 from models import create_azure_model
 import logging
+from tools import bioinformatics_tools
 
 logger = logging.getLogger(__name__)
 
@@ -20,34 +21,21 @@ Think about which steps are necessary to produce this analysis and generate a pl
 Install all necessary tools and packages to find variants responsible for this pathology.
 The dataset files are provided in the ./fibrosis/data/ directory.
 Provide the output processing and results in the ./fibrosis/outputs/ directory.
-Install all necessary tools and packages, execute the required tools to obtain the variant that explains
-the phenotype. You can wrap command line tool calls with Python code like so:
-result = subprocess.run(
-    ["fastqc", input_file, "-o", output_dir], capture_output=True, text=True
-)
-return {
-    "stdout": result.stdout,
-    "stderr": result.stderr,
-    "returncode": result.returncode,
-}
-You can provide sudo password like so if you need it
-echo 5hygs5nf | sudo -S apt-get install package_name
+Output the variant responsible for the pathology.
 """
 
 
-def run_agent():
-    model = create_azure_model()
-    bioagent = CodeAgent(
-        name="bioagent",
-        max_steps=50,
-        model=model,
-        tools=[],
-        planning_interval=3,
-        add_base_tools=True,
-        additional_authorized_imports=["*"],
-        executor_type="local",
-    )
+model = create_azure_model()
+bioagent = CodeAgent(
+    name="bioagent",
+    max_steps=30,
+    model=model,
+    tools=[bioinformatics_tools],
+    planning_interval=1,
+    add_base_tools=True,
+    additional_authorized_imports=["*"],
+    executor_type="local",
+)
 
-    model = create_azure_model()
-    result = bioagent.run(prompt)
-    print(result)
+result = bioagent.run(prompt)
+print(result)
