@@ -2,6 +2,8 @@ from smolagents import tool
 from typing import Dict, Union
 import subprocess
 from pathlib import Path
+from rpy2 import robjects
+from rpy2.robjects import pandas2ri
 
 
 @tool
@@ -49,10 +51,19 @@ def extract_sequences_tool(
     Returns:
         Dictionary containing extracted sequences
     """
-    sequences = ExtractBy(
-        x=pairs, y=db_path, z=cog_sets[lengths(cog_sets) >= 4], Verbose=True
-    )
-    return sequences
+    # Convert Python objects to R
+    r = robjects.r
+    r_pairs = pandas2ri.py2rpy(pairs)
+    r_cog_sets = robjects.ListVector(cog_sets)
+
+    # Call R's ExtractBy function
+    sequences = r("""
+        function(pairs, db_path, cog_sets) {
+            ExtractBy(x=pairs, y=db_path, z=cog_sets[lengths(cog_sets) >= 4], Verbose=TRUE)
+        }
+    """)(r_pairs, db_path, r_cog_sets)
+
+    return robjects.conversion.rpy2py(sequences)
 
 
 @tool
@@ -66,14 +77,29 @@ def build_phylogenetic_trees_tool(matched_sequences: Dict) -> Dict[str, Any]:
     Returns:
         Dictionary containing phylogenetic trees
     """
-    cog_trees = {}
-    for i, current_cog in enumerate(matched_sequences):
-        aligned_cog = AlignTranslation(current_cog)
-        cog_trees[i] = TreeLine(
-            aligned_cog, method="ML", reconstruct=True, maxTime=0.05, processors=None
-        )
-        print(f"Completed tree {i + 1} of {len(matched_sequences)}")
-    return cog_trees
+    r = robjects.r
+    r_matched_sequences = robjects.ListVector(matched_sequences)
+
+    # Define and call R function
+    cog_trees = r("""
+        function(matched_sequences) {
+            cog_trees <- list()
+            for (i in seq_along(matched_sequences)) {
+                aligned_cog <- AlignTranslation(matched_sequences[[i]])
+                cog_trees[[i]] <- TreeLine(
+                    aligned_cog, 
+                    method="ML", 
+                    reconstruct=TRUE, 
+                    maxTime=0.05, 
+                    processors=NULL
+                )
+                print(paste("Completed tree", i, "of", length(matched_sequences)))
+            }
+            return(cog_trees)
+        }
+    """)(r_matched_sequences)
+
+    return robjects.conversion.rpy2py(cog_trees)
 
 
 @tool
@@ -90,11 +116,23 @@ def annotate_sequences_tool(
     Returns:
         Dictionary containing annotations for each sequence
     """
-    cogs_annot = {}
-    for i, current_protein in enumerate(matched_sequences):
-        cogs_annot[i] = IdTaxa(current_protein, training_set, processors=None)
-        print(f"Completed annotation {i + 1} of {len(matched_sequences)}")
-    return cogs_annot
+    r = robjects.r
+    r_matched_sequences = robjects.ListVector(matched_sequences)
+    r_training_set = robjects.conversion.py2rpy(training_set)
+
+    # Define and call R function
+    cogs_annot = r("""
+        function(matched_sequences, training_set) {
+            cogs_annot <- list()
+            for (i in seq_along(matched_sequences)) {
+                cogs_annot[[i]] <- IdTaxa(matched_sequences[[i]], training_set, processors=NULL)
+                print(paste("Completed annotation", i, "of", length(matched_sequences)))
+            }
+            return(cogs_annot)
+        }
+    """)(r_matched_sequences, r_training_set)
+
+    return robjects.conversion.rpy2py(cogs_annot)
 
 
 bioinformatics_tools = [

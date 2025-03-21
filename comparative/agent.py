@@ -1,5 +1,5 @@
 from smolagents import CodeAgent
-from models import create_azure_model
+from models import create_azure_model, create_llama_model
 import logging
 from tools import bioinformatics_tools
 
@@ -21,7 +21,8 @@ analysis create an output subdirectory and name them in order for example step_1
 """
 
 
-model = create_azure_model()
+# model = create_azure_model()
+model = create_llama_model()
 bioagent = CodeAgent(
     name="bioagent",
     max_steps=30,

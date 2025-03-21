@@ -2,8 +2,13 @@ name: comparative
 channels:
   - conda-forge
   - bioconda
+  - bioconda/label/broken
+  - bioconda/label/cf201901
+  - bioconda/label/gcc7
 dependencies:
   - r-base
   - r-biocmanager
+  - bioconductor-s4vectors
   - bioconductor-decipher
   - bioconductor-synextend
+  - rpy2
