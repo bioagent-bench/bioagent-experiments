@@ -22,6 +22,26 @@ def create_azure_model():
     )
 
 
+def create_gemini_model():
+    api_key, endpoint = load_keys("gemini")
+
+    return OpenAIServerModel(
+        model_id="gemini-2.0-flash",
+        api_base=endpoint,
+        api_key=api_key,
+    )
+
+
+def create_claude_model():
+    api_key, endpoint = load_keys("claude")
+
+    return OpenAIServerModel(
+        model_id="claude-3-5-sonnet-20241022",
+        api_base=endpoint,
+        api_key=api_key,
+    )
+
+
 def create_llama_model():
     api_key, endpoint = load_keys("swiss")
 

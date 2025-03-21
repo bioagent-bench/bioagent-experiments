@@ -1,5 +1,10 @@
 from smolagents import CodeAgent
-from models import create_azure_model, create_llama_model
+from models import (
+    create_azure_model,
+    create_llama_model,
+    create_claude_model,
+    create_gemini_model,
+)
 import logging
 from tools import bioinformatics_tools
 
@@ -20,8 +25,9 @@ Provide the output processing and results in the ./outputs directory, for each s
 analysis create an output subdirectory and name them in order for example step_1, step_2, etc...
 """
 
-
 # model = create_azure_model()
+# model = create_claude_model()
+# model = create_gemini_model()
 model = create_llama_model()
 bioagent = CodeAgent(
     name="bioagent",

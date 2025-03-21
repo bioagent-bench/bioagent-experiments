@@ -1,5 +1,10 @@
 from smolagents import CodeAgent
-from models import create_azure_model
+from models import (
+    create_azure_model,
+    create_llama_model,
+    create_claude_model,
+    create_gemini_model,
+)
 import logging
 from tools import bioinformatics_tools
 
@@ -23,7 +28,10 @@ Only output those variants which are shared across both evolved lines.
 """
 
 
-model = create_azure_model()
+# model = create_azure_model()
+# model = create_claude_model()
+# model = create_gemini_model()
+# model = create_llama_model()
 bioagent = CodeAgent(
     name="bioagent",
     max_steps=30,
@@ -34,6 +42,5 @@ bioagent = CodeAgent(
     additional_authorized_imports=["*"],
     executor_type="local",
 )
-
 result = bioagent.run(prompt)
 print(result)
