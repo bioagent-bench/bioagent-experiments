@@ -5,8 +5,15 @@ Experiments for bioagent benchmark
 docker build -t bioagent .
 ```
 ```bash
-docker run -v $(pwd):/app bioagent
+docker run -it -v $(pwd):/app bioagent
 ```
 ```bash
 micromamba create -f environment.yaml
 ``` 
+```bash
+micromamba activate env-name
+```
+
+```bash
+pip install smolagents[openai]
+```

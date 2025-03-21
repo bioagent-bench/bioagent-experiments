@@ -2,10 +2,10 @@ from smolagents import AzureOpenAIServerModel, OpenAIServerModel
 
 
 def create_azure_model():
-    with open("api.key", "r") as key_file:
+    with open("../api.key", "r") as key_file:
         api_key = key_file.read().strip()
 
-    with open("endpoint.key", "r") as key_file:
+    with open("../endpoint.key", "r") as key_file:
         endpoint_key = key_file.read().strip()
 
     return AzureOpenAIServerModel(

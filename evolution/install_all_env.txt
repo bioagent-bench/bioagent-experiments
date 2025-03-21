@@ -1,0 +1,10 @@
+micromamba create -n fastp_env bioconda::fastp -y
+micromamba create -n fastqc_env bioconda::fastqc -y
+micromamba create -n multiqc_env bioconda::multiqc -y
+micromamba create -n spades_env bioconda::spades -y
+micromamba create -n quast_env
+micromamba create -y -n mapping_env -c bioconda samtools bwa qualimap r-base
+micromamba create -y -n variant_env -c bioconda samtools bamtools freebayes bedtools vcflib rtg-tools bcftools matplotlib
+micromamba create -y -n compleasm_env bioconda::compleasm
+micromamba create -y -n prokka_env bioconda::prokka
+micromamba create -n voi_env -c bioconda snpeff genometools-genometools bedtools

@@ -7,3 +7,9 @@ evolution/data
 comparative/data
 metagenomics/data
 *.pyc
+
+deseq/outputs
+comparative/outputs
+evolution/outputs
+fibrosis/outputs
+metagenomics/outputs

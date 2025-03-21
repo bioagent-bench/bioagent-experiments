@@ -47,7 +47,10 @@ def fastqc_tool(input_file: str, output_dir: str) -> Dict[str, Union[str, int]]:
         Dictionary containing stdout, stderr, and return code
     """
     result = subprocess.run(
-        ["fastqc", input_file, "-o", output_dir], capture_output=True, text=True
+        ["micromamba", "run", "-n", "fastqc_env", "fastqc", "-o", output_dir]
+        + input_file.split(),
+        capture_output=True,
+        text=True,
     )
 
     return {
@@ -73,6 +76,10 @@ def run_fastp(input_files: str, output_files: str, html: str, json: str) -> str:
     """
     result = subprocess.run(
         [
+            "micromamba",
+            "run",
+            "-n",
+            "fastp_env",
             "fastp",
             "--detect_adapter_for_pe",
             "--overrepresentation_analysis",
@@ -106,7 +113,8 @@ def run_fastqc(input_files: str, output_dir: str) -> str:
         Output from the FastQC command
     """
     result = subprocess.run(
-        ["fastqc", "-o", output_dir] + input_files.split(),
+        ["micromamba", "run", "-n", "fastqc_env", "fastqc", "-o", output_dir]
+        + input_files.split(),
         capture_output=True,
         text=True,
     )
@@ -127,7 +135,20 @@ def run_spades(read1: str, read2: str, output_dir: str) -> str:
         Output from the SPAdes command
     """
     result = subprocess.run(
-        ["spades.py", "-o", output_dir, "--careful", "-1", read1, "-2", read2],
+        [
+            "micromamba",
+            "run",
+            "-n",
+            "spades_env",
+            "spades.py",
+            "-o",
+            output_dir,
+            "--careful",
+            "-1",
+            read1,
+            "-2",
+            read2,
+        ],
         capture_output=True,
         text=True,
     )
@@ -147,7 +168,9 @@ def run_quast(assembly: str, output_dir: str) -> str:
         Output from the QUAST command
     """
     result = subprocess.run(
-        ["quast", "-o", output_dir, assembly], capture_output=True, text=True
+        ["micromamba", "run", "-n", "quast_env", "quast", "-o", output_dir, assembly],
+        capture_output=True,
+        text=True,
     )
     return result.stdout + result.stderr
 
@@ -163,7 +186,11 @@ def run_bwa_index(reference: str) -> str:
     Returns:
         Output from the BWA index command
     """
-    result = subprocess.run(["bwa", "index", reference], capture_output=True, text=True)
+    result = subprocess.run(
+        ["micromamba", "run", "-n", "mapping_env", "bwa", "index", reference],
+        capture_output=True,
+        text=True,
+    )
     return result.stdout + result.stderr
 
 
@@ -181,7 +208,19 @@ def run_bwa_mem(reference: str, read1: str, read2: str) -> str:
         Output from the BWA MEM command
     """
     result = subprocess.run(
-        ["bwa", "mem", reference, read1, read2], capture_output=True, text=True
+        [
+            "micromamba",
+            "run",
+            "-n",
+            "mapping_env",
+            "bwa",
+            "mem",
+            reference,
+            read1,
+            read2,
+        ],
+        capture_output=True,
+        text=True,
     )
     return result.stdout + result.stderr
 
@@ -199,7 +238,17 @@ def run_samtools_sort(input_bam: str, output_bam: str) -> str:
         Output from the Samtools sort command
     """
     result = subprocess.run(
-        ["samtools", "sort", "-o", output_bam, input_bam],
+        [
+            "micromamba",
+            "run",
+            "-n",
+            "mapping_env",
+            "samtools",
+            "sort",
+            "-o",
+            output_bam,
+            input_bam,
+        ],
         capture_output=True,
         text=True,
     )
@@ -219,7 +268,18 @@ def run_freebayes(reference: str, bam_file: str) -> str:
         Output from the Freebayes command
     """
     result = subprocess.run(
-        ["freebayes", "-f", reference, bam_file], capture_output=True, text=True
+        [
+            "micromamba",
+            "run",
+            "-n",
+            "variant_env",
+            "freebayes",
+            "-f",
+            reference,
+            bam_file,
+        ],
+        capture_output=True,
+        text=True,
     )
     return result.stdout + result.stderr
 
@@ -237,7 +297,18 @@ def run_prokka(input_file: str, output_dir: str) -> str:
         Output from the Prokka command
     """
     result = subprocess.run(
-        ["prokka", "--outdir", output_dir, input_file], capture_output=True, text=True
+        [
+            "micromamba",
+            "run",
+            "-n",
+            "prokka_env",
+            "prokka",
+            "--outdir",
+            output_dir,
+            input_file,
+        ],
+        capture_output=True,
+        text=True,
     )
     return result.stdout + result.stderr
 

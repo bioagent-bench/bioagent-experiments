@@ -19,8 +19,8 @@ Parents of NA12878: NA12891, NA12892
 
 Think about which steps are necessary to produce this analysis and generate a plan before starting.
 Install all necessary tools and packages to find variants responsible for this pathology.
-The dataset files are provided in the ./fibrosis/data/ directory.
-Provide the output processing and results in the ./fibrosis/outputs/ directory.
+The dataset files are provided in the ./data/ directory.
+Provide the output processing and results in the ./outputs/ directory.
 Output the variant responsible for the pathology.
 """
 
@@ -30,7 +30,7 @@ bioagent = CodeAgent(
     name="bioagent",
     max_steps=30,
     model=model,
-    tools=[bioinformatics_tools],
+    tools=bioinformatics_tools,
     planning_interval=1,
     add_base_tools=True,
     additional_authorized_imports=["*"],

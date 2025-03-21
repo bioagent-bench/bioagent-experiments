@@ -35,55 +35,6 @@ def read_directory_tool(directory_path: str) -> str:
 
 
 @tool
-def download_and_extract_fibrosis_data(download_link: str) -> str:
-    """
-    Download and extract fibrosis data.
-
-    Args:
-        download_link: Link to download the fibrosis data
-
-    Returns:
-        Output from the download and extraction process
-    """
-    subprocess.run(["mkdir", "data"], check=True)
-    result = subprocess.run(
-        ["wget", "-O", "data/fibrosis.tar.gz", download_link],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    subprocess.run(["tar", "-xzf", "data/fibrosis.tar.gz", "-C", "data/"], check=True)
-    return result.stdout + result.stderr
-
-
-@tool
-def create_fibrosis_env() -> str:
-    """
-    Create and activate the fibrosis environment.
-
-    Returns:
-        Output from the environment creation and activation process
-    """
-    subprocess.run(
-        [
-            "mamba",
-            "create",
-            "-n",
-            "fibrosis_env",
-            "-c",
-            "bioconda",
-            "snpeff",
-            "snpsift",
-        ],
-        check=True,
-    )
-    result = subprocess.run(
-        ["mamba", "activate", "fibrosis_env"], capture_output=True, text=True
-    )
-    return result.stdout + result.stderr
-
-
-@tool
 def run_snpEff(input_vcf: str) -> str:
     """
     Run SnpEff on the provided VCF file.
@@ -110,33 +61,6 @@ def run_snpEff(input_vcf: str) -> str:
         check=True,
     )
     return result.stdout + result.stderr
-
-
-@tool
-def convert_metadata_to_tfam(metadata_file: str) -> str:
-    """
-    Convert CSV metadata to tfam format.
-
-    Args:
-        metadata_file: Path to the CSV metadata file
-
-    Returns:
-        Output from the conversion process
-    """
-    result = subprocess.run(
-        [
-            "awk",
-            "-F','",
-            "NR>1 {print 'CEPH_1463', $1, ($3=='0' ? '0' : $3), ($4=='0' ? '0' : $4), $5, $6}",
-            metadata_file,
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    with open("data/pedigree.tfam", "w") as tfam_file:
-        tfam_file.write(result.stdout)
-    return result.stdout
 
 
 @tool
@@ -199,29 +123,6 @@ def filter_vcf(input_vcf: str) -> str:
 
 
 @tool
-def download_clinvar_data() -> str:
-    """
-    Download ClinVar data.
-
-    Returns:
-        Output from the download process
-    """
-    result = subprocess.run(
-        [
-            "wget",
-            "-O",
-            "data/clinvar_2025.vcf.gz",
-            "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh37/clinvar_20250217.vcf.gz",
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    subprocess.run(["gunzip", "-k", "data/clinvar_2025.vcf.gz"], check=True)
-    return result.stdout
-
-
-@tool
 def annotate_vcf(input_vcf: str) -> str:
     """
     Annotate the VCF file with ClinVar data.
@@ -274,13 +175,9 @@ def filter_clinvar_vcf(input_vcf: str) -> str:
 
 bioinformatics_tools = [
     read_directory_tool,
-    download_and_extract_fibrosis_data,
-    create_fibrosis_env,
     run_snpEff,
-    convert_metadata_to_tfam,
     run_snpSift,
     filter_vcf,
-    download_clinvar_data,
     annotate_vcf,
     filter_clinvar_vcf,
 ]

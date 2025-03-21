@@ -57,7 +57,13 @@ def run_fastqc(input_files: str, output_dir: str) -> str:
 
 @tool
 def run_trimmomatic(input_file_r1: str, input_file_r2: str, output_prefix: str) -> str:
-    """Run Trimmomatic on paired-end FASTQ files."""
+    """Run Trimmomatic on paired-end FASTQ files.
+
+    Args:
+        input_file_r1: Path to the first input FASTQ file
+        input_file_r2: Path to the second input FASTQ file
+        output_prefix: Prefix for output files
+    """
     try:
         result = subprocess.run(
             [
@@ -87,7 +93,14 @@ def run_trimmomatic(input_file_r1: str, input_file_r2: str, output_prefix: str) 
 def run_kraken(
     input_file: str, db_path: str, output_file: str, report_file: str
 ) -> str:
-    """Run Kraken2 for taxonomic classification."""
+    """Run Kraken2 for taxonomic classification.
+
+    Args:
+        input_file: Path to the input FASTQ file
+        db_path: Path to the Kraken database
+        output_file: Path to the output file for Kraken results
+        report_file: Path to the report file for Kraken results
+    """
     try:
         result = subprocess.run(
             [
@@ -112,7 +125,12 @@ def run_kraken(
 
 @tool
 def run_kraken_biom(report_files: list, output_file: str) -> str:
-    """Generate a BIOM file from Kraken reports."""
+    """Generate a BIOM file from Kraken reports.
+
+    Args:
+        report_files: List of paths to Kraken report files
+        output_file: Path to the output BIOM file
+    """
     try:
         result = subprocess.run(
             ["kraken-biom"] + report_files + ["--fmt", "json", "-o", output_file],

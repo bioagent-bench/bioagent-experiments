@@ -12,7 +12,7 @@ dependencies:
   - kraken-biom
   - r-base
   - r-biocmanager
-  - r-phyloseq
+  - bioconductor-phyloseq
   - r-rcolorbrewer
   - r-patchwork
   - r-dplyr
