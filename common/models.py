@@ -2,10 +2,10 @@ from smolagents import AzureOpenAIServerModel, OpenAIServerModel
 
 
 def load_keys(prefix):
-    with open(f"../keys/{prefix}_api.key", "r") as key_file:
+    with open(f".keys/{prefix}_api.key", "r") as key_file:
         api_key = key_file.read().strip()
 
-    with open(f"../keys/{prefix}_endpoint.key", "r") as key_file:
+    with open(f".keys/{prefix}_endpoint.key", "r") as key_file:
         endpoint = key_file.read().strip()
 
     return api_key, endpoint
