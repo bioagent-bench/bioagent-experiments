@@ -43,7 +43,7 @@ def create_claude_model():
 
 
 def create_llama_model():
-    api_key, endpoint = load_keys("swiss")
+    api_key, endpoint = load_keys("llama")
 
     return OpenAIServerModel(
         model_id="meta-llama/Llama-3.3-70B-Instruct",
