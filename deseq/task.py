@@ -1,6 +1,3 @@
-from common.agent import SingleAgentWorkflow
-
-# Task-specific prompt for deseq analysis
 prompt = """The dataset consists of RNA-Seq samples from Candida parapsilosis wild-type (WT) 
 strains grown in planktonic and biofilm conditions, generated as part of a study on gene 
 expression and biofilm formation. The samples were sequenced on the Illumina 
@@ -14,6 +11,3 @@ analysis create an output subdirectory and name them in order for example step_1
 The final output is a list of differentialy expressed genes between planktonic and biofilm
 conditions.
 """
-
-# Run the agent with the task-specific prompt
-SingleAgentWorkflow.run_with_prompt(prompt)

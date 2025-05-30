@@ -1,6 +1,3 @@
-from common.agent import SingleAgentWorkflow
-
-# Task-specific prompt for metagenomics analysis
 prompt = """The metagenomes that we will use were collected in Cuatro Ciénegas, 
 in a study about the response of the Cuatro Cienegas' bacterial community to nutrient
  enrichment. In this study, authors compared the differences between the microbial 
@@ -15,6 +12,3 @@ analysis create an output subdirectory and name them in order for example step_1
 The final result should be the output of the percentage change from the 5 most abundant
 species in the control data to the fertilization treatment
 """
-
-# Run the agent with the task-specific prompt
-SingleAgentWorkflow.run_with_prompt(prompt)

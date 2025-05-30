@@ -1,6 +1,3 @@
-from common.agent import SingleAgentWorkflow
-
-# Task-specific prompt for evolution analysis
 prompt = """The experiment follows a similar strategy as in what is called an
  "experimental evolution" experiment. The final aim is to identify the genome 
  variations in evolved lines of E. coli. The data is composed of a single ancestor line and 
@@ -17,6 +14,3 @@ conditions.
 The goal is to find to find and annotate the genome variations in the evolved lines of E.coli. 
 Only output those variants which are shared across both evolved lines.
 """
-
-# Run the agent with the task-specific prompt
-SingleAgentWorkflow.run_with_prompt(prompt)

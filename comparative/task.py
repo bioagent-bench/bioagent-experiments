@@ -1,4 +1,3 @@
-# Task-specific prompt for comparative analysis
 prompt = """The datasets consists FASTA sequences and GFF annotations of a microbial genome 
 for Micrococcus. The main goal. The goal of is to do phylogenetic reconstruction of 
 clusters of orthologous co-evolving genes. The COGs needs to be filtered based on the 

@@ -1,6 +1,3 @@
-from common.agent import SingleAgentWorkflow
-
-# Task-specific prompt for fibrosis analysis
 prompt = """The sample dataset is a simulated dataset for finding the generic 
 cause of Cystic fibrosis. The dataset is real sequencing data from CEPH_1463 
 dataset provided by the Complete Genomics Diversity Panel. It consists of sequencing of a 
@@ -19,6 +16,3 @@ The dataset files are provided in the ./data/ directory.
 Provide the output processing and results in the ./outputs/ directory.
 Output the variant responsible for the pathology.
 """
-
-# Run the agent with the task-specific prompt
-SingleAgentWorkflow.run_with_prompt(prompt)
