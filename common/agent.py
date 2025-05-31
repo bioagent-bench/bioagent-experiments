@@ -10,7 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-name2model_func = {
+MODEL_SETUP_FUNC = {
     'azure': create_azure_model(),
     'llama': create_llama_model(),
     'claude': create_claude_model(),
@@ -46,22 +46,16 @@ class SingleAgentWorkflow:
             executor_type: Type of executor to use
         """
         # Set up model based on model_type
-        if model_type == "azure":
-            model = create_azure_model()
-        elif model_type == "llama":
-            model = create_llama_model()
-        elif model_type == "claude":
-            model = create_claude_model()
-        elif model_type == "gemini":
-            model = create_gemini_model()
-        else:
+        if model_type not in MODEL_SETUP_FUNC:
             raise ValueError(f"Unknown model type: {model_type}")
+        model_setup_func = MODEL_SETUP_FUNC[model_type]
+        model = model_setup_func()
 
         # Set default values
         if additional_authorized_imports is None:
             additional_authorized_imports = ["*"]
 
-        # Create the agent
+        # TODO: Integrate Hydra for agent configs for experiments
         self.agent = CodeAgent(
             name=name,
             max_steps=max_steps,
@@ -113,10 +107,8 @@ class SingleAgentWorkflow:
                 tools=tool_collection.tools,
             )
 
-            # Run the agent and get the result
             result = bioagent.run(prompt)
 
-            # Print the result
             print(result)
 
             return result

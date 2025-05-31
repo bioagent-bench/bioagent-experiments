@@ -50,3 +50,10 @@ def create_llama_model():
         api_base=endpoint,
         api_key=api_key,
     )
+
+model_loader_mapping = {
+    'azure': create_azure_model,
+    'llama': create_llama_model,
+    'claude': create_claude_model,
+    'gemini': create_gemini_model
+}
