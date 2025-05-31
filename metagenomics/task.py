@@ -1,17 +1,5 @@
-from smolagents import CodeAgent
-from models import (
-    create_azure_model,
-    create_llama_model,
-    create_claude_model,
-    create_gemini_model,
-)
-import logging
-from tools import bioinformatics_tools
-
-logger = logging.getLogger(__name__)
-
 prompt = """The metagenomes that we will use were collected in Cuatro Ciénegas, 
-in a study about the response of the Cuatro Cienegas’ bacterial community to nutrient
+in a study about the response of the Cuatro Cienegas' bacterial community to nutrient
  enrichment. In this study, authors compared the differences between the microbial 
  community in its natural, oligotrophic, phosphorus-deficient environment, a pond from 
  the Cuatro Ciénegas Basin (CCB), and the same microbial community under a fertilization 
@@ -24,20 +12,3 @@ analysis create an output subdirectory and name them in order for example step_1
 The final result should be the output of the percentage change from the 5 most abundant
 species in the control data to the fertilization treatment
 """
-
-# model = create_azure_model()
-# model = create_claude_model()
-# model = create_gemini_model()
-# model = create_llama_model()
-bioagent = CodeAgent(
-    name="bioagent",
-    max_steps=30,
-    model=model,
-    tools=bioinformatics_tools,
-    planning_interval=1,
-    add_base_tools=True,
-    additional_authorized_imports=["*"],
-    executor_type="local",
-)
-result = bioagent.run(prompt)
-print(result)
