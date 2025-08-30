@@ -1,6 +1,6 @@
 from smolagents import CodeAgent, ToolCollection
 from typing import List, Any, Optional
-from common.models import (
+from .models import (
     create_azure_model,
     create_llama_model,
     create_claude_model,
@@ -19,10 +19,10 @@ logger.info("Phoenix telemetry initialized (agent)")
 
 
 MODEL_SETUP_FUNC = {
-    'azure': create_azure_model(),
-    'llama': create_llama_model(),
-    'claude': create_claude_model(),
-    'gemini': create_gemini_model()
+    'azure': create_azure_model,
+    'llama': create_llama_model,
+    'claude': create_claude_model,
+    'gemini': create_gemini_model,
 }
 
 
