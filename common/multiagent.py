@@ -5,6 +5,13 @@ import subprocess
 import os
 import yaml
 import logging
+try:
+    from phoenix.otel import register  # type: ignore
+    from openinference.instrumentation.smolagents import SmolagentsInstrumentor  # type: ignore
+    register()
+    SmolagentsInstrumentor().instrument()
+except Exception:
+    pass
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

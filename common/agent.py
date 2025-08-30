@@ -10,6 +10,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from phoenix.otel import register
+from openinference.instrumentation.smolagents import SmolagentsInstrumentor
+
+register()
+SmolagentsInstrumentor().instrument()
+logger.info("Phoenix telemetry initialized (agent)")
+
+
 MODEL_SETUP_FUNC = {
     'azure': create_azure_model(),
     'llama': create_llama_model(),
