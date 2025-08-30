@@ -130,9 +130,10 @@ def execute_code(code: str, env_name: Optional[str] = None) -> str:
 
 
 class BioinformaticsMultiAgentWorkflow:
-    def __init__(self):
+    def __init__(self, executor_type: str = "local"):
         self.model = create_azure_model()
         self.mcp_params = {"url": "http://0.0.0.0:8000/sse"}
+        self.executor_type = executor_type
 
         # TODO: Hydra for configs
         with ToolCollection.from_mcp(self.mcp_params, trust_remote_code=True) as tool_collection:
@@ -143,7 +144,7 @@ class BioinformaticsMultiAgentWorkflow:
                 tools=list(tool_collection.tools),
                 planning_interval=1,
                 add_base_tools=True,
-                executor_type="local",
+                executor_type=self.executor_type,
             )
 
         with ToolCollection.from_mcp(self.mcp_params, trust_remote_code=True) as tool_collection:
@@ -154,7 +155,7 @@ class BioinformaticsMultiAgentWorkflow:
                 tools=list(tool_collection.tools) + [setup_environment, install_packages, pip_install],
                 planning_interval=1,
                 add_base_tools=True,
-                executor_type="local",
+                executor_type=self.executor_type,
             )
 
         with ToolCollection.from_mcp(self.mcp_params, trust_remote_code=True) as tool_collection:
@@ -166,7 +167,7 @@ class BioinformaticsMultiAgentWorkflow:
                 planning_interval=1,
                 add_base_tools=True,
                 additional_authorized_imports=["*"],
-                executor_type="local",
+                executor_type=self.executor_type,
             )
 
     def create_environment_setup_plan_prompt(self, execution_plan: str) -> str:
@@ -222,17 +223,19 @@ class BioinformaticsMultiAgentWorkflow:
         logger.info("Starting multiagent workflow")
 
 
-        # Step 1. Creating an execution plan
-        orchestrator_prompt = self.create_execution_plan_prompt(task_description)
-        execution_plan = self.orchestrator.run(orchestrator_prompt)
+        # Ensure containers are cleaned up by using context managers
+        with self.orchestrator as orchestrator, self.environment_manager as environment_manager, self.code_agent as code_agent:
+            # Step 1. Creating an execution plan
+            orchestrator_prompt = self.create_execution_plan_prompt(task_description)
+            execution_plan = orchestrator.run(orchestrator_prompt)
 
-        # Step 2: Orchestrator supplies environment setup plan to environment manager
-        environment_setup_prompt = self.create_environment_setup_plan_prompt(execution_plan)
-        self.environment_manager.run(environment_setup_prompt)
-        environment_setup = self.environment_manager.run(environment_setup_prompt)
+            # Step 2: Orchestrator supplies environment setup plan to environment manager
+            environment_setup_prompt = self.create_environment_setup_plan_prompt(execution_plan)
+            environment_manager.run(environment_setup_prompt)
+            environment_setup = environment_manager.run(environment_setup_prompt)
 
-        # Step 3: Code generates and executes code based on the execution plan and environment setup
-        code_agent_prompt = self.create_code_execution_prompt(execution_plan, environment_setup)
-        code_execution_result = self.code_agent.run(code_agent_prompt)
+            # Step 3: Code generates and executes code based on the execution plan and environment setup
+            code_agent_prompt = self.create_code_execution_prompt(execution_plan, environment_setup)
+            code_execution_result = code_agent.run(code_agent_prompt)
 
         return code_execution_result

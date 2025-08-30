@@ -77,11 +77,13 @@ class SingleAgentWorkflow:
         Returns:
             The result of running the agent
         """
-        result = self.agent.run(prompt)
-        return result
+        # Use context manager to ensure proper cleanup (e.g., Docker executor)
+        with self.agent as agent:
+            result = agent.run(prompt)
+            return result
 
     @classmethod
-    def run_with_prompt(cls, prompt: str, model_type: str = "llama", mcp_url: str = "http://0.0.0.0:8000/sse"):
+    def run_with_prompt(cls, prompt: str, model_type: str = "llama", mcp_url: str = "http://0.0.0.0:8000/sse", executor_type: str = "local"):
         """
         Create an agent, run it with the given prompt, and print the result.
 
@@ -105,6 +107,7 @@ class SingleAgentWorkflow:
             bioagent = cls(
                 model_type=model_type,
                 tools=tool_collection.tools,
+                executor_type=executor_type,
             )
 
             result = bioagent.run(prompt)

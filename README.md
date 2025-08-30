@@ -15,5 +15,5 @@ micromamba activate env-name
 ```
 
 ```bash
-pip install smolagents[openai]
-```
+pip install 'smolagents[docker, openai]'
+```.
