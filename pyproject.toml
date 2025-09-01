@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "smolagents[docker,openai,telemetry,toolkit]>=1.21.2",
+    "smolagents[docker,openai]>=1.21.2",
     "docker>=7.1.0",
+    "openinference-instrumentation-smolagents>=0.1.16",
+    "arize-phoenix>=11.30.0",
 ]

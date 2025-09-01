@@ -15,10 +15,10 @@ def create_azure_model():
     api_key, endpoint = load_keys("azure")
 
     return AzureOpenAIServerModel(
-        model_id="gpt-4o-mini",
+        model_id="gpt-5-mini",
         azure_endpoint=endpoint,
         api_key=api_key,
-        api_version="2024-12-01-preview",
+        api_version="2025-01-01-preview",
     )
 
 

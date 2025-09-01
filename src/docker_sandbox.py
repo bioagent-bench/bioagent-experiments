@@ -4,10 +4,28 @@ from typing import Optional, Dict, Any, List
 import docker
 
 
+class ExecutionError:
+    def __init__(self, traceback: str):
+        self.traceback = traceback
+
+
+class ExecutionLogs:
+    def __init__(self, stdout: List[str]):
+        self.stdout = stdout
+
+
+class ExecutionResult:
+    def __init__(self, output: str = "", error: Optional[ExecutionError] = None):
+        self.output = output
+        self.error = error
+        self.logs = ExecutionLogs([output] if output else [])
+
+
 class DockerSandbox:
-    def __init__(self):
+    def __init__(self, volume_path: Optional[str] = None):
         self.client = docker.from_env()
         self.container = None
+        self.volume = volume_path
 
     def create_container(self, host_path: Optional[str] = None, container_path: Optional[str] = "/workspace"):
         try:
@@ -38,10 +56,7 @@ class DockerSandbox:
             command="tail -f /dev/null",
             detach=True,
             tty=True,
-            mem_limit="512m",
-            cpu_quota=50000,
-            pids_limit=100,
-            security_opt=["no-new-privileges"],
+            mem_limit="100gb",
             cap_drop=["ALL"],
             volumes=volumes,
             environment={
@@ -49,15 +64,29 @@ class DockerSandbox:
             },
         )
 
-    def run_code(self, code: str, host_path: Optional[str] = None, container_path: Optional[str] = "/workspace") -> Optional[str]:
+    def run_code(self, code: str, host_path: Optional[str] = None, container_path: Optional[str] = "/workspace", envs: Optional[Dict[str, str]] = None) -> ExecutionResult:
         if not self.container:
             self.create_container(host_path=host_path, container_path=container_path)
 
-        exec_result = self.container.exec_run(
-            cmd=["python", "-c", code],
-            user="nobody"
-        )
-        return exec_result.output.decode() if exec_result.output else None
+        try:
+            exec_result = self.container.exec_run(
+                cmd=["python", "-c", code],
+                user="nobody",
+                environment=envs
+            )
+
+            output = exec_result.output.decode() if exec_result.output else ""
+            exit_code = exec_result.exit_code
+
+            if exit_code != 0:
+                error = ExecutionError(traceback=output)
+                return ExecutionResult(output=output, error=error)
+            else:
+                return ExecutionResult(output=output)
+
+        except Exception as e:
+            error = ExecutionError(traceback=str(e))
+            return ExecutionResult(error=error)
 
 
     def cleanup(self):

@@ -11,3 +11,8 @@ docker run -it -v $(pwd):/app bioagent
 ```bash
 uv sync
 ```
+
+Run telemetry 
+```bash
+python -m pheonix.server.main serve
+```
