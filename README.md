@@ -14,5 +14,5 @@ uv sync
 
 Run telemetry 
 ```bash
-python -m pheonix.server.main serve
+python -m phoenix.server.main serve
 ```
