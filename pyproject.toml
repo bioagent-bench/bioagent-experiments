@@ -10,3 +10,19 @@ dependencies = [
     "openinference-instrumentation-smolagents>=0.1.16",
     "arize-phoenix>=11.30.0",
 ]
+
+[tool.uv.workspace]
+members = [
+    ".",
+]
+
+[tool.uv.sources]
+bioagent-experiments = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "bioagent-experiments",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

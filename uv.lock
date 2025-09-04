@@ -192,6 +192,11 @@ dependencies = [
     { name = "smolagents", extra = ["docker", "openai"] },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "bioagent-experiments" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "arize-phoenix", specifier = ">=11.30.0" },
@@ -199,6 +204,9 @@ requires-dist = [
     { name = "openinference-instrumentation-smolagents", specifier = ">=0.1.16" },
     { name = "smolagents", extras = ["docker", "openai"], specifier = ">=1.21.2" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "bioagent-experiments", virtual = "." }]
 
 [[package]]
 name = "cachetools"
