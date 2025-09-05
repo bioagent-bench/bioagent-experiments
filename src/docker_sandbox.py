@@ -1,5 +1,6 @@
 import os
 from typing import Optional, Dict, Any, List
+from pathlib import Path
 
 import docker
 
@@ -27,7 +28,7 @@ class DockerSandbox:
         self.container = None
         self.volume = volume_path
 
-    def create_container(self, host_path: Optional[str] = None, container_path: Optional[str] = "/workspace"):
+    def create_container(self, task_data_path: Optional[str] = None, output_path: Optional[str] = None):
         try:
             image, build_logs = self.client.images.build(
                 path=".",
@@ -45,10 +46,37 @@ class DockerSandbox:
 
         # Prepare volume mounts
         volumes = {}
-        if host_path and container_path:
-            volumes[host_path] = {
-                'bind': container_path,
-                'mode': 'rw'
+        
+        # Mount task data directory if provided
+        if task_data_path:
+            task_path = Path(task_data_path)
+            
+            # Mount data directory
+            data_path = task_path / "data"
+            if data_path.exists():
+                volumes[str(data_path)] = {
+                    'bind': '/workspace/data',
+                    'mode': 'ro'  # Read-only for input data
+                }
+            
+            # Mount reference directory
+            reference_path = task_path / "reference"
+            if reference_path.exists():
+                volumes[str(reference_path)] = {
+                    'bind': '/workspace/reference',
+                    'mode': 'ro'  # Read-only for reference data
+                }
+        
+        # Mount output directory if provided
+        if output_path:
+            # Ensure output path is absolute and exists with proper permissions
+            output_abs_path = str(Path(output_path).resolve())
+            Path(output_path).mkdir(parents=True, exist_ok=True)
+            # Set permissions to allow writing from container
+            os.chmod(output_path, 0o777)
+            volumes[output_abs_path] = {
+                'bind': '/workspace/output',
+                'mode': 'rw'  # Read-write for output
             }
 
         self.container = self.client.containers.run(
@@ -62,16 +90,17 @@ class DockerSandbox:
             environment={
                 "HF_TOKEN": os.getenv("HF_TOKEN")
             },
+            working_dir="/workspace"
         )
 
-    def run_code(self, code: str, host_path: Optional[str] = None, container_path: Optional[str] = "/workspace", envs: Optional[Dict[str, str]] = None) -> ExecutionResult:
+    def run_code(self, code: str, task_data_path: Optional[str] = None, output_path: Optional[str] = None, envs: Optional[Dict[str, str]] = None) -> ExecutionResult:
         if not self.container:
-            self.create_container(host_path=host_path, container_path=container_path)
+            self.create_container(task_data_path=task_data_path, output_path=output_path)
 
         try:
             exec_result = self.container.exec_run(
-                cmd=["python", "-c", code],
-                user="nobody",
+                cmd=["/opt/conda/bin/python", "-c", code],
+                user="root",  # Use root to avoid permission issues
                 environment=envs
             )
 
