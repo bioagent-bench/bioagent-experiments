@@ -90,41 +90,18 @@ for key in ['HF_TOKEN']:
             task_data_path=dataset.path,
             output_path=str(run_dir / "output")
         )
-        
-        # Save results
-        output_file = run_dir / "agent_output.txt"
-        with open(output_file, "w") as f:
-            if result.output:
-                f.write(result.output)
-            if result.error:
-                f.write(f"\n\nERROR:\n{result.error.traceback}")
-        
-        # Create result summary
-        result_summary = {
-            "success": result.error is None,
-            "output_length": len(result.output) if result.output else 0,
-            "error": result.error.traceback if result.error else None
-        }
-        
-        print(f"Result for {dataset.task_id}:")
-        print(f"  Success: {result_summary['success']}")
-        if result.output:
-            print(f"  Output preview: {result.output[:200]}...")
-        if result.error:
-            print(f"  Error: {result.error.traceback}")
-        
-        return result_summary
+        print(output)
         
     finally:
         # Always cleanup the sandbox
         sandbox.cleanup()
 
 def main():
-    """Main experiment runner."""
     print("Starting bioagent experiments...")
     
     # Load all datasets
     datasets = DataSet.load_all()
+    datasets = datasets[:1]
     print(f"Found {len(datasets)} datasets to process")
     
     # Create overall run logs directory
@@ -167,7 +144,6 @@ def main():
         json.dump({
             "timestamp": datetime.now().isoformat(),
             "total_experiments": len(datasets),
-            "successful_experiments": sum(1 for r in results.values() if r.get("success", False)),
             "results": results
         }, f, indent=2)
     

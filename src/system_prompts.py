@@ -83,8 +83,7 @@ system_prompt_v1 = (
     "outputs/1/alignment/"
     "outputs/3/postprocessing/"
     "</example>"
-    "Do not overwrite; create a new timestamped run if rerun is needed."
-    "Before starting another step always run 'ls' command to see which files have been generated"
+    "Before starting another step always run 'tree' command to see which files have been generated"
 
     "# Finalizing the pipeline"
     "Output the final results in the same format as was asked by the user in the provided example"
