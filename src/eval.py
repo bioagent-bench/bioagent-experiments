@@ -4,8 +4,7 @@ from smolagents import CodeAgent
 from models import create_azure_model
 from dataset import DataSet
 from system_prompts import system_prompt_v1
-from judge_agent import parse_outputs
-
+from judge_agent import parse_outputs, parse_results, eval_giab_results
 # Create output directories
 def create_dirs(prefix: str):
     outputs_path = Path(prefix) / "outputs"
@@ -32,5 +31,11 @@ for task in datasets:
     # agent.run(task.task_prompt)
 
     output_tree = parse_outputs(test_path)
+
+    if task.task_id == "giab":
+        output_results = eval_giab_results(test_path / "results")
+    else:
+        output_results = parse_results(test_path)
+
     print(output_tree)
 
