@@ -1,17 +1,15 @@
 import csv
-from pathlib import Path
-import shutil
 import subprocess
-from urllib.request import urlopen
-from urllib.error import URLError, HTTPError
+import tempfile
+from pathlib import Path
 
 
-def parse_outputs(output_dir):
+def parse_agent_outputs(output_dir):
     """Return a list of all files and folders in the directory."""
     return list(Path(output_dir).rglob("*"))
 
 
-def parse_results(results_dir):
+def parse_agent_results(results_dir):
     """Parse results from CSV/TSV files.
 
     Args:
@@ -55,37 +53,75 @@ def parse_results(results_dir):
 
     return {}
 
-def eval_giab_results(results_dir):
-    """Locate GIAB VCF and index files under a results directory.
+def eval_giab_metrics(
+    agent_results_dir: Path,
+    truth_dir: Path,
+    input_bed: Path,
+    ref_fasta: Path,
+    ):
+    """Run hap.py evaluation on GIAB VCF files and return summary metrics.
 
     Args:
-        results_dir (str | Path): Path to the results directory to scan.
+        agent_results_dir (Path): Path to the agent results directory containing VCF files.
+        truth_dir (Path): Path to the truth data directory containing benchmark files.
 
     Returns:
-        dict[str, Path]: Dictionary with keys ``"vcf_gz"`` and ``"vcf_gz_tbi"``
-        pointing to the ``.vcf.gz`` file and its corresponding ``.vcf.gz.tbi``
-        tabix index file. Returns an empty dict if either file is not found.
+        dict: Dictionary containing hap.py summary metrics with keys like
+        Type, TRUTH, QUERY, Recall, Precision, F1_Score, or empty dict if evaluation fails.
     """
 
-    base_path = Path(results_dir)
-
-    if not base_path.exists() or not base_path.is_dir():
+    # Find agent VCF files
+    vcf_candidates = sorted(agent_results_dir.rglob("*.vcf.gz"))
+    if not vcf_candidates:
         return {}
 
-    vcf_candidates = sorted(base_path.rglob("*.vcf.gz"))
-    tbi_candidates = sorted(base_path.rglob("*.vcf.gz.tbi"))
+    agent_vcf = vcf_candidates[0]
 
-    if not vcf_candidates or not tbi_candidates:
-        return {}
-
-    # Prefer a matching .tbi for a given .vcf.gz if available
-    for vcf_path in vcf_candidates:
-        tbi_path = Path(f"{vcf_path}.tbi")
-        if tbi_path.exists():
-            return {"vcf_gz": vcf_path, "vcf_gz_tbi": tbi_path}
-
-    # Fallback to first found of each type
-    return {"vcf_gz": vcf_candidates[0], "vcf_gz_tbi": tbi_candidates[0]}
+    truth_vcf = truth_dir / "HG001_GRCh38_1_22_v4.2.1_benchmark.vcf.gz"
+    truth_bed = truth_dir / "HG001_GRCh38_1_22_v4.2.1_benchmark.bed"
+    
+    # Create temporary directory for hap.py output
+    with tempfile.TemporaryDirectory() as temp_dir:
+        output_prefix = Path(temp_dir) / "evaluation"
+        
+        try:
+            # Run hap.py
+            cmd = [
+                "mamba",
+                "run",
+                "-n", "hap",
+                "hap.py",
+                str(truth_vcf),
+                str(agent_vcf),
+                "-f", str(truth_bed),
+                "-o", str(output_prefix),
+                "-T", str(input_bed),
+                "-r", str(ref_fasta),
+                "--pass-only"
+            ]
+            
+            subprocess.run(cmd, check=True, capture_output=True)
+            
+            # Parse summary.csv file
+            summary_file = Path(f"{output_prefix}.summary.csv")
+            if summary_file.exists():
+                with summary_file.open("r") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        if row.get("Type") == "SNP":  # Return SNP metrics
+                            return {
+                                "Type": row.get("Type"),
+                                "TRUTH": row.get("TRUTH.TOTAL"),
+                                "QUERY": row.get("QUERY.TOTAL"),
+                                "Recall": row.get("METRIC.Recall"),
+                                "Precision": row.get("METRIC.Precision"),
+                                "F1_Score": row.get("METRIC.F1_Score")
+                            }
+            
+        except Exception as e:
+            print(e)
+    
+    return {}
 
 def build_judge_agent():
     pass
