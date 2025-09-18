@@ -84,45 +84,60 @@ def eval_giab_metrics(
     with tempfile.TemporaryDirectory() as temp_dir:
         output_prefix = Path(temp_dir) / "evaluation"
         
-        try:
-            # Run hap.py
-            cmd = [
-                "mamba",
-                "run",
-                "-n", "hap",
-                "hap.py",
-                str(truth_vcf),
-                str(agent_vcf),
-                "-f", str(truth_bed),
-                "-o", str(output_prefix),
-                "-T", str(input_bed),
-                "-r", str(ref_fasta),
-                "--pass-only"
-            ]
-            
-            subprocess.run(cmd, check=True, capture_output=True)
-            
-            # Parse summary.csv file
-            summary_file = Path(f"{output_prefix}.summary.csv")
-            if summary_file.exists():
-                with summary_file.open("r") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        if row.get("Type") == "SNP":  # Return SNP metrics
-                            return {
-                                "Type": row.get("Type"),
-                                "TRUTH": row.get("TRUTH.TOTAL"),
-                                "QUERY": row.get("QUERY.TOTAL"),
-                                "Recall": row.get("METRIC.Recall"),
-                                "Precision": row.get("METRIC.Precision"),
-                                "F1_Score": row.get("METRIC.F1_Score")
-                            }
-            
-        except Exception as e:
-            print(e)
-    
-    return {}
+        # Run hap.py
+        cmd = [
+            "mamba",
+            "run",
+            "-n", "hap",
+            "hap.py",
+            str(truth_vcf),
+            str(agent_vcf),
+            "-f", str(truth_bed),
+            "-o", str(output_prefix),
+            "-T", str(input_bed),
+            "-r", str(ref_fasta),
+            "--pass-only"
+        ]
+        
+        subprocess.run(cmd, check=True, capture_output=True)
+        
+        # Parse summary.csv file
+        summary_file = Path(f"{output_prefix}.summary.csv")
+        if summary_file.exists():
+            with summary_file.open("r") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row.get("Type") == "SNP":  # Return SNP metrics
+                        return (
+                            "These are benchmarking metrics from hap.py, which compares the "
+                            "called variants (QUERY) to the Genome in a Bottle truth set (TRUTH). "
+                            "The table shows results for SNPs, including the number of variants in "
+                            "the truth set and query, as well as the calculated recall, precision, "
+                            f"and F1-score.\n\n"
+                            f"Type: {row.get('Type')}\n"
+                            f"TRUTH Total: {row.get('TRUTH.TOTAL')}\n"
+                            f"QUERY Total: {row.get('QUERY.TOTAL')}\n"
+                            f"Recall: {row.get('METRIC.Recall')}\n"
+                            f"Precision: {row.get('METRIC.Precision')}\n"
+                            f"F1-Score: {row.get('METRIC.F1_Score')}"
+                        )
 
-def build_judge_agent():
-    pass
+def build_judge_agent(
+    processing_tree: list[Path],
+    results: str,
+    truth: str,
+    ):
+    prompt = (
+        "You are a strict, impartial **Bioinformatics Pipeline Judge**. Your job is to evaluate"
+        "an LLM agent's work for executing a bioinformatics pipeline instructed by the prompt."
+        "The LLM agent was given an instruction to output each processing step in a separate folder."
+        "The data to evaluate each agent is given as follows:"
+        "1. You are given the input and the reference data which the agent was given to work with."
+        "2. You are given the whole directory structure of the agent's work and it is your job"
+        "to estimate how close to completing the pipeline the agent came."
+        "3. You are given the final results which the agent was instructed to produce,"
+        "**if they exist**."
+        "4. You are givne the truth data which is the expected output of the prompted pipeline."
+        "5. You are given the prompt which the agent was given to complete."
+    )
 

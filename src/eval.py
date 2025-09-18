@@ -5,6 +5,7 @@ from models import create_azure_model
 from dataset import DataSet
 from system_prompts import system_prompt_v1
 from judge_agent import parse_agent_outputs, parse_agent_results, eval_giab_metrics
+
 # Create output directories
 def create_dirs(prefix: str):
     outputs_path = Path(prefix) / "outputs"
@@ -42,9 +43,9 @@ for task in datasets:
             test_path / "reference" / "Homo_sapiens_assembly38.fasta",
         )
         print(agent_results)
-        print(error)
     else:
         agent_results = parse_agent_results(test_path)
 
-    print(agent_results)
+
+
 
