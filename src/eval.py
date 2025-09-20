@@ -1,10 +1,12 @@
 
+import json
+from modulefinder import test
 from pathlib import Path
 from smolagents import CodeAgent
-from models import create_azure_model
+from models import create_azure_model, load_keys
 from dataset import DataSet
 from system_prompts import system_prompt_v1
-from judge_agent import build_judge_agent_giab, parse_agent_outputs, parse_agent_results, eval_giab_metrics
+from judge_agent import EvaluationResults, build_judge_prompt_csv, build_judge_prompt_giab, parse_agent_outputs, parse_agent_results, eval_giab_metrics
 
 # Create output directories
 def create_dirs(prefix: str):
@@ -28,14 +30,14 @@ for task in datasets:
     test_path = Path('test_outputs/' + task.task_id)
     # create_dirs(test_path)
 
-    # agent = CodeAgent(
-    #         max_steps=10,
-    #         model=create_azure_model(),
-    #         tools=[],
-    #         additional_authorized_imports=["*"],
-    #     )
-    # agent.prompt_templates['system_prompt'] = system_prompt_v1
-    # agent.run(task.task_prompt)
+    agent = CodeAgent(
+            max_steps=10,
+            model=create_azure_model(),
+            tools=[],
+            additional_authorized_imports=["*"],
+        )
+    agent.prompt_templates['system_prompt'] = system_prompt_v1
+    agent.run(task.task_prompt)
 
     """Block for collecting data for judge LLM"""
     # Files that were provided to the agent
@@ -54,15 +56,33 @@ for task in datasets:
             test_path / "data" / "Agilent_v7.chr.bed",
             test_path / "reference" / "Homo_sapiens_assembly38.fasta",
         )
-        agent_prompt = build_judge_agent_giab(
+        agent_prompt = build_judge_prompt_giab(
             input_data,
             task.task_prompt,
             agent_output_tree,
             agent_results,
         )
         print(agent_prompt)
+    
     else:
-        agent_results = parse_agent_results(test_path)
+        agent_results = parse_agent_results(test_path / "results")
+        truth_results = parse_agent_results(test_path / "results")
+        agent_prompt = build_judge_prompt_csv(
+            input_data,
+            task.task_prompt,
+            agent_output_tree,
+            agent_results,
+            truth_results,
+        )
+
+    # Evaluate the results using an LLM
+    client = create_azure_model(framework='openai')
+    response = client.chat.completions.create(
+        model="gpt-5-mini",
+        messages=[{"role": "user", "content": agent_prompt}],
+    ).choices[0].message.content
+    final_result = EvaluationResults(**json.loads(response))
+
         
 
 

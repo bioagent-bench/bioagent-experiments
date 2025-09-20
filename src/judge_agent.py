@@ -160,74 +160,6 @@ def eval_giab_metrics(
                             f"F1-Score: {row.get('METRIC.F1_Score')}"
                         )
 
-def build_judge_agent_csv(
-    input_data: list[Path],
-    task_prompt: str,
-    processing_tree: list[Path],
-    results: str,
-    truth: str,
-    ):
-    """This agent evalutes the results that are given as a CSV file."""
-    prompt = (
-        "You are a strict, impartial **Bioinformatics Pipeline Judge**. Your job is to evaluate"
-        "an LLM agent's work for executing a bioinformatics pipeline instructed by the prompt."
-        "The LLM agent was given an instruction to output each processing step in a separate folder."
-        "The data to evaluate each agent is given as follows:"
-        "1. You are given the paths of the input and the reference data which the agent was given" 
-        "to work with."
-        "2. You are given the whole directory structure of the agent's work and it is your job"
-        "to estimate how close to completing the pipeline the agent came."
-        "3. You are given the final results which the agent was instructed to produce,"
-        "**if they exist**."
-        "4. You are givne the truth data which is the expected output of the prompted pipeline."
-        "5. You are given the prompt which the agent was given to complete."
-        "-------------------------------------------------------------------------------\n"
-        f"1. Input and the reference data: {input_data}"
-        "\n"
-        f"2. Processing tree: {processing_tree}"
-        "\n"
-        f"3. Results: {results}"
-        "\n"
-        f"4. Truth: {truth}"
-        "\n"
-        f"5. Prompt: {task_prompt}"
-        "----------------------------------------------------------------------------------\n"
-
-    )
-    return prompt
-
-
-def build_judge_agent_giab(
-    input_data: list[Path],
-    task_prompt: str,
-    processing_tree: list[Path],
-    results: str,
-    ):
-    """This agent evalutes the results that are given as a CSV file."""
-    prompt = (
-        "You are a strict, impartial **Bioinformatics Pipeline Judge**. Your job is to evaluate"
-        "an LLM agent's work for executing a bioinformatics pipeline instructed by the prompt."
-        "The LLM agent was given an instruction to output each processing step in a separate folder."
-        "The data to evaluate each agent is given as follows:"
-        "1. You are given the paths of the input and the reference data which the agent was given" 
-        "to work with."
-        "2. You are given the whole directory structure of the agent's work and it is your job"
-        "to estimate how close to completing the pipeline the agent came."
-        "3. You are given the evaluation metrics for the final results" 
-        "which the agent was instructed to produce, **if they exist**."
-        "you are supposed to evaluate the correctness by Recall, Precision, and F1-Score."
-        "4. You are given the prompt which the agent was given to complete."
-        "-------------------------------------------------------------------------------"
-        f"1. Input and the reference data: {input_data}"
-        "\n"
-        f"2. Processing tree: {processing_tree}"
-        "\n"
-        f"3. Results: {results}"
-        "\n"
-        f"4. Prompt: {task_prompt}"
-    )
-    return prompt
-
 class EvaluationResultsGiab:
     steps_to_completion: dict
     final_results_reached: bool
@@ -359,7 +291,7 @@ def eval_giab_metrics(
                             f"F1-Score: {row.get('METRIC.F1_Score')}"
                         )
 
-def build_judge_agent_csv(
+def build_judge_prompt_csv(
     input_data: list[Path],
     task_prompt: str,
     processing_tree: list[Path],
@@ -401,14 +333,14 @@ def build_judge_agent_csv(
         "2. steps_to_completion: int - The number of steps that the agent was expected to complete."
         "3. final_result_reached: bool - Whether the agent reached the final result."
         "4. notes: str - Summarize where the agent stopped if stopped and what steps are left to be done."
-        "You are supposed to return the metrics in a dictionary format that satisifes the schema:"
+        "You are supposed to return the metrics as a JSON object with fields that satisifes the schema:"
         f"{EvaluationResults.__annotations__}"
 
     )
     return prompt
 
 
-def build_judge_agent_giab(
+def build_judge_prompt_giab(
     input_data: list[Path],
     task_prompt: str,
     processing_tree: list[Path],
@@ -446,7 +378,7 @@ def build_judge_agent_giab(
         "3. final_result_reached: bool - Whether the agent reached the final result."
         "4. notes: str - Summarize where the agent stopped if stopped and what steps are left to be done."
         "5. f1_score: dict - The F1-score metrics for the variant calling benchmarking."
-        "You are supposed to return the metrics in a dictionary format that satisifes the schema:"
+        "You are supposed to return the metrics as a JSON object with fields that satisifes the schema:"
         f"{EvaluationResultsGiab.__annotations__}"
 
     )

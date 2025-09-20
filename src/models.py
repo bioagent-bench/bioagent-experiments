@@ -1,3 +1,4 @@
+from openai import AzureOpenAI
 from smolagents import AzureOpenAIServerModel, OpenAIServerModel
 
 
@@ -11,15 +12,22 @@ def load_keys(prefix):
     return api_key, endpoint
 
 
-def create_azure_model():
+def create_azure_model(framework='smolagents'):
     api_key, endpoint = load_keys("azure")
 
-    return AzureOpenAIServerModel(
-        model_id="gpt-5-mini",
-        azure_endpoint=endpoint,
-        api_key=api_key,
-        api_version="2025-01-01-preview",
-    )
+    if framework == 'smolagents':
+        return AzureOpenAIServerModel(
+            model_id="gpt-5-mini",
+            azure_endpoint=endpoint,
+            api_key=api_key,
+            api_version="2025-01-01-preview",
+        )
+    else:
+        return AzureOpenAI(
+            api_key=api_key,
+            api_version="2025-01-01-preview",
+            azure_endpoint=endpoint,
+        )
 
 
 def create_gemini_model():
