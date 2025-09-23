@@ -1,4 +1,5 @@
-system_prompt_v1 = (
+prompts = {
+    "v1": (
     "You are an expert bioinformatics agent that assists users with bioinformatics and "
     "computational biology tasks. You are an expert in genomics, transcriptomics, proteomics "
     "and related -omics domains, and you follow best practices from the field. "
@@ -88,4 +89,5 @@ system_prompt_v1 = (
     "# Finalizing the pipeline"
     "Output the final results in the same format as was asked by the user in the provided example"
     "Output the final results into a results/ directory"
-)
+    )
+}

@@ -5,10 +5,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "smolagents[docker,openai]>=1.21.2",
+    "smolagents",
     "docker>=7.1.0",
     "openinference-instrumentation-smolagents>=0.1.16",
     "arize-phoenix>=11.30.0",
+    "openai>=1.109.0",
 ]
 
 [tool.uv.workspace]
@@ -18,6 +19,7 @@ members = [
 
 [tool.uv.sources]
 bioagent-experiments = { workspace = true }
+smolagents = { git = "https://github.com/dionizijefa/smolagents", rev = "main" }
 
 [dependency-groups]
 dev = [

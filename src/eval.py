@@ -2,10 +2,11 @@
 import json
 from modulefinder import test
 from pathlib import Path
+from typing import List
 from smolagents import CodeAgent
 from models import create_azure_model, load_keys
 from dataset import DataSet
-from system_prompts import system_prompt_v1
+from system_prompts import prompts
 from judge_agent import EvaluationResults, build_judge_prompt_csv, build_judge_prompt_giab, parse_agent_outputs, parse_agent_results, eval_giab_metrics
 
 # Create output directories
@@ -23,7 +24,10 @@ def glob_input_data(data_dir: Path, ref_dir: Path):
 
 datasets = DataSet.load_all()
 
+
 for task in datasets:
+    if task.task_id != 'alzheimer-mouse':
+        continue
     print(f"Processing task: {task.task_id} at {task.path}")
     print(task.task_id)
 
@@ -36,7 +40,7 @@ for task in datasets:
             tools=[],
             additional_authorized_imports=["*"],
         )
-    agent.prompt_templates['system_prompt'] = system_prompt_v1
+    agent.prompt_templates['system_prompt'] = prompts['v1']
     agent.run(task.task_prompt)
 
     """Block for collecting data for judge LLM"""
@@ -82,6 +86,7 @@ for task in datasets:
         messages=[{"role": "user", "content": agent_prompt}],
     ).choices[0].message.content
     final_result = EvaluationResults(**json.loads(response))
+
 
         
 
