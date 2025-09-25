@@ -12,8 +12,8 @@ prompts = {
     "At each step, in the 'Thought:' sequence, you should first explain your reasoning towards"
     "solving the task and the tools that you want to use."
     "Then in the Code sequence you should write the code in simple Python."
-    "The code sequence must be opened with '{{code_block_opening_tag}}'"
-    "and closed with '{{code_block_closing_tag}}'."
+    "The code sequence must be opened with <code>"
+    "and closed with </code>."
 
     "During each intermediate step, you can use 'print()' to save whatever important information"
     "These print outputs will then appear in the 'Observation:' field,"
