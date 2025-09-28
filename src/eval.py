@@ -23,10 +23,6 @@ from system_prompts import prompts
 from tools import run_terminal_command
 
 
-register()
-SmolagentsInstrumentor().instrument()
-
-
 def create_dirs(prefix: Path) -> None:
     """Create standard output directories for an evaluation run.
 
@@ -60,15 +56,14 @@ def glob_input_data(data_dir: Path, ref_dir: Path) -> list[Path]:
     return sorted({*data_files, *ref_files})
 
 
-def evaluate_task(run_config: RunConfig) -> EvaluationResults:
+def evaluate_task(run_config: RunConfig) -> RunConfig:
     """Run a single dataset evaluation using the provided configuration.
 
     Args:
         run_config (RunConfig): Configuration describing how to run the agent.
-        task (DataSet): Dataset metadata for the evaluation task.
 
     Returns:
-        EvaluationResults: Structured results parsed from the judge model output.
+        RunConfig: Updated run configuration with evaluation results.
     """
 
     experiment_root = Path(run_config.experiment_name).expanduser()
@@ -83,11 +78,16 @@ def evaluate_task(run_config: RunConfig) -> EvaluationResults:
         tools=run_config.tools,
         additional_authorized_imports=["*"],
         planning_interval=run_config.planning_interval,
+        return_full_result=True,
     )
     agent.prompt_templates["system_prompt"] = run_config.system_prompt
     results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
-    print(results.token_usage)
-    print(results.timing)
+
+    # collect stuff from the results
+    run_config.input_tokens = results.token_usage.input_tokens
+    run_config.output_tokens = results.token_usage.output_tokens
+    run_config.duration = results.timing.duration / 60 # in minutes
+    run_config.steps = len(results.steps)
     agent_output_tree = parse_agent_outputs(test_path)
 
     if run_config.task_id == "giab":
@@ -122,11 +122,10 @@ def evaluate_task(run_config: RunConfig) -> EvaluationResults:
     final_result = EvaluationResults(**json.loads(response))
 
     run_config.eval_results = final_result
-    run_config.timestamp_end = datetime.now()
     metadata_path = test_path / "results" / "run_metadata.json"
     run_config.save_run_metadata(metadata_path)
 
-    return final_result
+    return run_config
 
 
 def main() -> None:
@@ -140,6 +139,7 @@ def main() -> None:
             continue
 
         run_config = RunConfig(
+            timestamp=datetime.now(),
             task_id=task.task_id,
             task_prompt=task.task_prompt,
             max_steps=1,
@@ -148,11 +148,10 @@ def main() -> None:
             tools=tools,
             system_prompt=prompts["v1"],
             system_prompt_name="v1",
-            experiment_name="../test_outputs",
+            experiment_name="open-environment",
             model="azure",
         )
 
-        run_config.timestamp_start = datetime.now()
         print(f"Processing task: {task.task_id} at {task.path}")
         result = evaluate_task(run_config)
         print(f"Completed evaluation for {task.task_id}: {result}")
