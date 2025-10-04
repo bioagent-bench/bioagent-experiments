@@ -16,3 +16,4 @@ metagenomics/outputs
 
 .keys/
 test_outputs/
+run-logs/*

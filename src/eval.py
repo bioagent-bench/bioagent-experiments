@@ -34,26 +34,36 @@ def create_dirs(prefix: Path) -> None:
     """
 
     root = Path(prefix)
-    outputs_path = root / "outputs"
-    results_path = root / "results"
-    outputs_path.mkdir(parents=True, exist_ok=True)
-    results_path.mkdir(parents=True, exist_ok=True)
+    directories = (
+        root / "inputs",
+        root / "inputs" / "data",
+        root / "inputs" / "reference",
+        root / "outputs",
+        root / "results",
+    )
+
+    for path in directories:
+        path.mkdir(parents=True, exist_ok=True)
 
 
-def glob_input_data(data_dir: Path, ref_dir: Path) -> list[Path]:
+def glob_input_data(*input_dirs: Path) -> list[Path]:
     """Collect all files used as input for evaluation.
 
     Args:
-        data_dir (Path): Directory containing task-specific data inputs.
-        ref_dir (Path): Directory containing reference materials.
+        *input_dirs (Path): Directories containing task-specific input or reference data.
 
     Returns:
-        list[Path]: Sorted list of file paths discovered under ``data_dir`` and ``ref_dir``.
+        list[Path]: Sorted list of file paths discovered under the provided directories.
     """
 
-    data_files = [p for p in data_dir.rglob("*") if p.is_file()]
-    ref_files = [p for p in ref_dir.rglob("*") if p.is_file()]
-    return sorted({*data_files, *ref_files})
+    files: set[Path] = set()
+    for directory in input_dirs:
+        root = Path(directory)
+        if not root.exists():
+            continue
+        files.update(p for p in root.rglob("*") if p.is_file())
+
+    return sorted(files)
 
 
 def evaluate_task(run_config: RunConfig) -> RunConfig:
@@ -66,36 +76,42 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
         RunConfig: Updated run configuration with evaluation results.
     """
 
-    experiment_root = Path(run_config.experiment_name).expanduser()
-    test_path = experiment_root / run_config.task_id
+    run_timestamp = run_config.timestamp.strftime("%Y%m%d-%H%M%S")
+    experiment_root = Path("./run-logs") / run_config.experiment_name / run_config.task_id
+    test_path = experiment_root / run_timestamp
     create_dirs(test_path)
 
-    input_data = glob_input_data(test_path / "data", test_path / "reference")
+    inputs_root = test_path / "inputs"
+    input_data = glob_input_data(inputs_root / "data", inputs_root / "reference")
 
-    agent = CodeAgent(
-        max_steps=run_config.max_steps,
-        model=create_azure_model(),
-        tools=run_config.tools,
-        additional_authorized_imports=["*"],
-        planning_interval=run_config.planning_interval,
-        return_full_result=True,
-    )
-    agent.prompt_templates["system_prompt"] = run_config.system_prompt
-    results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
+    # agent = CodeAgent(
+    #     max_steps=run_config.max_steps,
+    #     model=create_azure_model(),
+    #     tools=run_config.tools,
+    #     additional_authorized_imports=["*"],
+    #     planning_interval=run_config.planning_interval,
+    #     return_full_result=True,
+    # )
+    # agent.prompt_templates["system_prompt"] = run_config.system_prompt
+    # results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
 
     # collect stuff from the results
-    run_config.input_tokens = results.token_usage.input_tokens
-    run_config.output_tokens = results.token_usage.output_tokens
-    run_config.duration = results.timing.duration / 60 # in minutes
-    run_config.steps = len(results.steps)
+    run_config.input_tokens = 0
+    run_config.output_tokens = 0
+    run_config.duration = 0
+    run_config.steps = 0
+    # run_config.input_tokens = results.token_usage.input_tokens
+    # run_config.output_tokens = results.token_usage.output_tokens
+    # run_config.duration = results.timing.duration / 60 # in minutes
+    # run_config.steps = len(results.steps)
     agent_output_tree = parse_agent_outputs(test_path)
 
     if run_config.task_id == "giab":
         agent_results = eval_giab_metrics(
             test_path / "results",
             test_path / "results",
-            test_path / "data" / "Agilent_v7.chr.bed",
-            test_path / "reference" / "Homo_sapiens_assembly38.fasta",
+            inputs_root / "data" / "Agilent_v7.chr.bed",
+            inputs_root / "reference" / "Homo_sapiens_assembly38.fasta",
         )
         agent_prompt = build_judge_prompt_giab(
             input_data,
@@ -114,14 +130,15 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
             truth_results,
         )
 
-    client = create_azure_model(framework="openai")
-    response = client.chat.completions.create(
-        model="gpt-5-mini",
-        messages=[{"role": "user", "content": agent_prompt}],
-    ).choices[0].message.content
-    final_result = EvaluationResults(**json.loads(response))
+    # client = create_azure_model(framework="openai")
+    # response = client.chat.completions.create(
+    #     model="gpt-5-mini",
+    #     messages=[{"role": "user", "content": agent_prompt}],
+    # ).choices[0].message.content
+    # final_result = EvaluationResults(**json.loads(response))
 
-    run_config.eval_results = final_result
+    # run_config.eval_results = final_result
+    run_config.eval_results = 'placeholder'
     metadata_path = test_path / "results" / "run_metadata.json"
     run_config.save_run_metadata(metadata_path)
 
@@ -135,9 +152,6 @@ def main() -> None:
     tools: list[Iterable] = [run_terminal_command]
 
     for task in datasets:
-        if task.task_id != "alzheimer-mouse":
-            continue
-
         run_config = RunConfig(
             timestamp=datetime.now(),
             task_id=task.task_id,
