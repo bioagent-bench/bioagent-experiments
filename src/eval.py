@@ -91,7 +91,11 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
     outputs_root = run_path / "outputs"
     results_root = run_path / "results"
 
-    sandbox = DockerSandbox(volume_path=None, run_hash=run_config.run_hash)
+    sandbox = DockerSandbox(
+        volume_path=None,
+        run_hash=run_config.run_hash,
+        image_tag=run_config.task_id,
+    )
 
     sandbox_code = """
 from pathlib import Path

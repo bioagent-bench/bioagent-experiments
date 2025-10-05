@@ -27,30 +27,52 @@ class ExecutionResult:
 
 
 class DockerSandbox:
-    def __init__(self, volume_path: Optional[str] = None, run_hash: Optional[str] = None):
+    def __init__(
+        self,
+        volume_path: str,
+        run_hash: str,
+        image_tag: str,
+    ):
+        """Initialize a Docker sandbox instance ready to run code.
+
+        Args:
+            volume_path: Host volume path to mount inside the container.
+            run_hash: Identifier for the current sandbox run.
+            image_tag: Docker image tag to use or build for this sandbox.
+
+        Returns:
+            None: Sets up Docker client references for sandbox operations.
+        """
+
         self.client = docker.from_env()
         self.container = None
         self.volume = volume_path
         self.run_hash = run_hash
+        self.image_tag = image_tag
 
     def create_container(
         self,
         additional_env: Optional[Dict[str, str]] = None,
     ):
+        tag = self.image_tag
+
         try:
-            image, build_logs = self.client.images.build(
-                path=".",
-                tag="agent-sandbox",
-                rm=True,
-                forcerm=True,
-                buildargs={},
-            )
-        except docker.errors.BuildError as e:
-            print("Build error logs:")
-            for log in e.build_log:
-                if 'stream' in log:
-                    print(log['stream'].strip())
-            raise
+            self.client.images.get(tag)
+        except docker.errors.ImageNotFound:
+            try:
+                self.client.images.build(
+                    path=".",
+                    tag=tag,
+                    rm=True,
+                    forcerm=True,
+                    buildargs={},
+                )
+            except docker.errors.BuildError as e:
+                print("Build error logs:")
+                for log in e.build_log:
+                    if "stream" in log:
+                        print(log["stream"].strip())
+                raise
 
         extra_hosts = {"host.docker.internal": "host-gateway"}
         environment = {
@@ -61,7 +83,7 @@ class DockerSandbox:
             environment.update(additional_env)
 
         self.container = self.client.containers.run(
-            "agent-sandbox",
+            tag,
             command="tail -f /dev/null",
             detach=True,
             tty=True,
@@ -142,6 +164,8 @@ class DockerSandbox:
     ) -> ExecutionResult:
         if run_hash:
             self.run_hash = run_hash
+        if envs and "TASK_ID" in envs and envs["TASK_ID"]:
+            self.image_tag = envs["TASK_ID"]
 
         if not self.container:
             self.create_container(
