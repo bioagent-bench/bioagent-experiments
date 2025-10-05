@@ -15,8 +15,8 @@ class DataSet:
     @classmethod
     def load_all(
         cls,
-        metadata_path: str | Path = Path('~/bioagent-bench/src/task_metadata.json').expanduser(),
-        data_root: str | Path = Path('~/bioagent-data').expanduser(),
+        metadata_path: str,
+        data_root: str,
     ) -> List["DataSet"]:
         """
         Load datasets from task_metadata.json and map local paths by folder name.

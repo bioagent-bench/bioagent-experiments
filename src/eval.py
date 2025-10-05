@@ -44,9 +44,6 @@ def create_dirs(prefix: Path) -> None:
 
     root = Path(prefix)
     directories = (
-        root / "inputs",
-        root / "inputs" / "data",
-        root / "inputs" / "reference",
         root / "outputs",
         root / "results",
     )
@@ -74,30 +71,6 @@ def glob_input_data(*input_dirs: Path) -> list[Path]:
 
     return sorted(files)
 
-
-def _sync_directory(source: Path, destination: Path) -> None:
-    """Sync contents of ``source`` into ``destination`` if source exists.
-
-    Args:
-        source (Path): Folder to copy from.
-        destination (Path): Folder to copy into.
-
-    Returns:
-        None: Copies files and subdirectories as a side effect.
-    """
-
-    if not source.exists():
-        return
-
-    destination.mkdir(parents=True, exist_ok=True)
-    for item in source.iterdir():
-        dest_item = destination / item.name
-        if item.is_dir():
-            _sync_directory(item, dest_item)
-        else:
-            shutil.copy2(item, dest_item)
-
-
 def evaluate_task(run_config: RunConfig) -> RunConfig:
     """Run a single dataset evaluation using the provided configuration.
 
@@ -111,17 +84,12 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
     run_timestamp = run_config.timestamp.strftime("%Y%m%d-%H%M%S")
     run_logs_root = run_config.run_logs_root or Path("./run-logs")
     experiment_root = Path(run_logs_root) / run_config.experiment_name / run_config.task_id
-    test_path = experiment_root / run_timestamp
-    create_dirs(test_path)
+    run_path = experiment_root / run_timestamp
+    create_dirs(run_path)
 
-    inputs_root = test_path / "inputs"
-    outputs_root = test_path / "outputs"
-    results_root = test_path / "results"
-
-    if run_config.data_path:
-        data_root = Path(run_config.data_path)
-        _sync_directory(data_root / "data", inputs_root / "data")
-        _sync_directory(data_root / "reference", inputs_root / "reference")
+    inputs_root = run_config.data_path
+    outputs_root = run_path / "outputs"
+    results_root = run_path / "results"
 
     sandbox = DockerSandbox(volume_path=None, run_hash=run_config.run_hash)
 
@@ -166,12 +134,12 @@ results_dir.mkdir(parents=True, exist_ok=True)
     # run_config.output_tokens = results.token_usage.output_tokens
     # run_config.duration = results.timing.duration / 60 # in minutes
     # run_config.steps = len(results.steps)
-    agent_output_tree = parse_agent_outputs(test_path)
+    agent_output_tree = parse_agent_outputs(run_path)
 
     if run_config.task_id == "giab":
         agent_results = eval_giab_metrics(
-            test_path / "results",
-            test_path / "results",
+            run_path / "results",
+            run_path / "results",
             inputs_root / "data" / "Agilent_v7.chr.bed",
             inputs_root / "reference" / "Homo_sapiens_assembly38.fasta",
         )
@@ -182,8 +150,8 @@ results_dir.mkdir(parents=True, exist_ok=True)
             agent_results,
         )
     else:
-        agent_results = parse_agent_results(test_path / "results")
-        truth_results = parse_agent_results(test_path / "results")
+        agent_results = parse_agent_results(run_path / "results")
+        truth_results = parse_agent_results(run_path / "results")
         agent_prompt = build_judge_prompt_csv(
             input_data,
             run_config.task_prompt,
@@ -201,7 +169,7 @@ results_dir.mkdir(parents=True, exist_ok=True)
 
     # run_config.eval_results = final_result
     run_config.eval_results = "placeholder"
-    metadata_path = test_path / "run_metadata.json"
+    metadata_path = run_path / "run_metadata.json"
     run_config.save_run_metadata(metadata_path)
 
     return run_config
@@ -210,7 +178,10 @@ results_dir.mkdir(parents=True, exist_ok=True)
 def main() -> None:
     """Execute evaluations configured via ``RunConfig`` entries."""
 
-    datasets = DataSet.load_all()
+    datasets = DataSet.load_all(
+        metadata_path=Path("~/bioagent-bench/src/task_metadata.json").expanduser(),
+        data_root=Path("~/bioagent-data").expanduser(),
+    )
     tools: list[Iterable] = [run_terminal_command]
 
     default_run_logs_root = Path(os.getenv("RUN_LOGS_ROOT"))
@@ -233,7 +204,7 @@ def main() -> None:
             experiment_name="open-environment",
             model="azure",
             run_logs_root=default_run_logs_root,
-            data_path=Path(task.path) if task.path else None,
+            data_path=Path(task.path),
         )
 
         print(f"Processing task: {task.task_id} at {task.path}")

@@ -35,9 +35,6 @@ class DockerSandbox:
 
     def create_container(
         self,
-        task_data_path: Optional[str] = None,
-        output_path: Optional[str] = None,
-        results_path: Optional[str] = None,
         additional_env: Optional[Dict[str, str]] = None,
     ):
         try:
@@ -148,9 +145,6 @@ class DockerSandbox:
 
         if not self.container:
             self.create_container(
-                task_data_path=task_data_path,
-                output_path=output_path,
-                results_path=results_path,
                 additional_env=envs,
             )
 
