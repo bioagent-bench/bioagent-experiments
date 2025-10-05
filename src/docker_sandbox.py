@@ -1,6 +1,10 @@
+import io
 import os
-from typing import Optional, Dict, Any, List
+import shutil
+import tarfile
+import tempfile
 from pathlib import Path
+from typing import Optional, Dict, Any, List
 
 import docker
 
@@ -51,53 +55,6 @@ class DockerSandbox:
                     print(log['stream'].strip())
             raise
 
-        # Prepare volume mounts
-        volumes = {}
-        
-        # Mount task data directory if provided
-        if task_data_path:
-            task_path = Path(task_data_path).resolve()
-            
-            # Mount data directory
-            data_path = task_path / "data"
-            if data_path.exists():
-                volumes[str(data_path)] = {
-                    'bind': '/workspace/data',
-                    'mode': 'ro'  # Read-only for input data
-                }
-            
-            # Mount reference directory
-            reference_path = task_path / "reference"
-            if reference_path.exists():
-                volumes[str(reference_path)] = {
-                    'bind': '/workspace/reference',
-                    'mode': 'ro'  # Read-only for reference data
-                }
-        
-        # Mount output directory if provided
-        if output_path:
-            # Ensure output path is absolute and exists with proper permissions
-            output_abs_path = str(Path(output_path).resolve())
-            output_resolved = Path(output_path)
-            output_resolved.mkdir(parents=True, exist_ok=True)
-            # Set permissions to allow writing from container
-            os.chmod(output_resolved, 0o777)
-            volumes[output_abs_path] = {
-                'bind': '/workspace/output',
-                'mode': 'rw'  # Read-write for output
-            }
-
-        # Mount results directory if provided
-        if results_path:
-            results_abs_path = str(Path(results_path).resolve())
-            results_resolved = Path(results_path)
-            results_resolved.mkdir(parents=True, exist_ok=True)
-            os.chmod(results_resolved, 0o777)
-            volumes[results_abs_path] = {
-                'bind': '/workspace/results',
-                'mode': 'rw'
-            }
-
         extra_hosts = {"host.docker.internal": "host-gateway"}
         environment = {
             "PHEONIX_COLLECTOR_ENDPOINT": "http://host.docker.internal:6006/v1/traces"
@@ -113,11 +70,69 @@ class DockerSandbox:
             tty=True,
             mem_limit="100gb",
             cap_drop=["ALL"],
-            volumes=volumes,
             environment=environment,
             working_dir="/workspace",
             extra_hosts=extra_hosts
         )
+
+    def _copy_directory_to_container(self, source: Path, destination: Path) -> None:
+        """Copy ``source`` directory from host into container ``destination`` path.
+
+        Args:
+            source (Path): Host directory to copy.
+            destination (Path): Target path inside the container.
+
+        Returns:
+            None: Copies data into the running container.
+        """
+        if not source.exists() or not source.is_dir():
+            return
+
+        archive_stream = io.BytesIO()
+        with tarfile.open(fileobj=archive_stream, mode="w") as tar:
+            tar.add(str(source), arcname=destination.name)
+
+        archive_stream.seek(0)
+        self.container.exec_run(["mkdir", "-p", str(destination.parent)])
+        self.container.exec_run(["rm", "-rf", str(destination)])
+        self.container.put_archive(str(destination.parent), archive_stream.getvalue())
+
+    def _copy_directory_from_container(self, source: Path, destination: Path) -> None:
+        """Copy ``source`` directory from container into host ``destination`` path.
+
+        Args:
+            source (Path): Directory inside the container.
+            destination (Path): Destination directory on the host.
+
+        Returns:
+            None: Extracts container data into the host filesystem.
+        """
+        try:
+            stream, _ = self.container.get_archive(str(source))
+        except docker.errors.NotFound:
+            return
+
+        temp_dir = Path(tempfile.mkdtemp())
+        try:
+            archive_stream = io.BytesIO()
+            for chunk in stream:
+                archive_stream.write(chunk)
+            archive_stream.seek(0)
+
+            with tarfile.open(fileobj=archive_stream, mode="r") as tar:
+                tar.extractall(path=temp_dir)
+
+            extracted = temp_dir / source.name
+            destination = Path(destination).resolve()
+            if destination.exists():
+                shutil.rmtree(destination)
+            if extracted.is_dir():
+                shutil.copytree(extracted, destination)
+            elif extracted.exists():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(extracted, destination)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     def run_code(
         self,
@@ -139,25 +154,65 @@ class DockerSandbox:
                 additional_env=envs,
             )
 
+        output_root = Path(output_path) if output_path else None
+        results_root = Path(results_path) if results_path else None
+        inputs_root = Path(task_data_path) if task_data_path else None
+
+        if inputs_root:
+            inputs_root = inputs_root.resolve()
+            self._copy_directory_to_container(inputs_root / "data", Path("/workspace/data"))
+            self._copy_directory_to_container(inputs_root / "reference", Path("/workspace/reference"))
+
+        log_dir_candidates = [root.parent for root in (output_root, results_root, inputs_root) if root is not None]
+        log_dir = log_dir_candidates[0] if log_dir_candidates else Path.cwd()
+        log_dir = log_dir.resolve()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file_path = log_dir / "docker_stdout.log"
+
         try:
             exec_result = self.container.exec_run(
                 cmd=["/opt/conda/bin/python", "-c", code],
-                user="root",  # Use root to avoid permission issues
-                environment=envs
+                user="root",
+                environment=envs,
+                stream=True,
+                demux=True,
             )
 
-            output = exec_result.output.decode() if exec_result.output else ""
+            output_chunks: List[str] = []
+            with log_file_path.open("w", encoding="utf-8") as log_file:
+                for stdout_chunk, stderr_chunk in exec_result.output:
+                    if stdout_chunk:
+                        text = stdout_chunk.decode()
+                        output_chunks.append(text)
+                        log_file.write(text)
+                        log_file.flush()
+                    if stderr_chunk:
+                        text = stderr_chunk.decode()
+                        output_chunks.append(text)
+                        log_file.write(text)
+                        log_file.flush()
+
+            output = "".join(output_chunks)
             exit_code = exec_result.exit_code
 
             if exit_code != 0:
                 error = ExecutionError(traceback=output)
-                return ExecutionResult(output=output, error=error)
+                result = ExecutionResult(output=output, error=error)
             else:
-                return ExecutionResult(output=output)
+                result = ExecutionResult(output=output)
 
         except Exception as e:
             error = ExecutionError(traceback=str(e))
-            return ExecutionResult(error=error)
+            result = ExecutionResult(error=error)
+        finally:
+            if output_root:
+                output_root.mkdir(parents=True, exist_ok=True)
+                self._copy_directory_from_container(Path("/workspace/output"), output_root)
+            if results_root:
+                results_root.mkdir(parents=True, exist_ok=True)
+                self._copy_directory_from_container(Path("/workspace/results"), results_root)
+
+        return result
 
 
     def cleanup(self):

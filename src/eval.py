@@ -132,10 +132,6 @@ output_dir = Path('/workspace/output')
 results_dir = Path('/workspace/results')
 output_dir.mkdir(parents=True, exist_ok=True)
 results_dir.mkdir(parents=True, exist_ok=True)
-
-(results_dir / 'results.csv').write_text('step,status\\nplaceholder,completed\\n', encoding='utf-8')
-
-print('Sandbox processing finished successfully.')
 """
 
     try:
@@ -150,26 +146,26 @@ print('Sandbox processing finished successfully.')
 
     input_data = glob_input_data(inputs_root / "data", inputs_root / "reference")
 
-    agent = CodeAgent(
-        max_steps=run_config.max_steps,
-        model=create_azure_model(),
-        tools=run_config.tools,
-        additional_authorized_imports=["*"],
-        planning_interval=run_config.planning_interval,
-        return_full_result=True,
-    )
-    agent.prompt_templates["system_prompt"] = run_config.system_prompt
-    results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
+    # agent = CodeAgent(
+    #     max_steps=run_config.max_steps,
+    #     model=create_azure_model(),
+    #     tools=run_config.tools,
+    #     additional_authorized_imports=["*"],
+    #     planning_interval=run_config.planning_interval,
+    #     return_full_result=True,
+    # )
+    # agent.prompt_templates["system_prompt"] = run_config.system_prompt
+    # results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
 
     # collect stuff from the results
-    # run_config.input_tokens = 0
-    # run_config.output_tokens = 0
-    # run_config.duration = 0
-    # run_config.steps = 0
-    run_config.input_tokens = results.token_usage.input_tokens
-    run_config.output_tokens = results.token_usage.output_tokens
-    run_config.duration = results.timing.duration / 60 # in minutes
-    run_config.steps = len(results.steps)
+    run_config.input_tokens = 0
+    run_config.output_tokens = 0
+    run_config.duration = 0
+    run_config.steps = 0
+    # run_config.input_tokens = results.token_usage.input_tokens
+    # run_config.output_tokens = results.token_usage.output_tokens
+    # run_config.duration = results.timing.duration / 60 # in minutes
+    # run_config.steps = len(results.steps)
     agent_output_tree = parse_agent_outputs(test_path)
 
     if run_config.task_id == "giab":
@@ -196,16 +192,16 @@ print('Sandbox processing finished successfully.')
             truth_results,
         )
 
-    client = create_azure_model(framework="openai")
-    response = client.chat.completions.create(
-        model="gpt-5-mini",
-        messages=[{"role": "user", "content": agent_prompt}],
-    ).choices[0].message.content
-    final_result = EvaluationResults(**json.loads(response))
+    # client = create_azure_model(framework="openai")
+    # response = client.chat.completions.create(
+    #     model="gpt-5-mini",
+    #     messages=[{"role": "user", "content": agent_prompt}],
+    # ).choices[0].message.content
+    # final_result = EvaluationResults(**json.loads(response))
 
-    run_config.eval_results = final_result
-    run_config.eval_results = 'placeholder'
-    metadata_path = test_path / "results" / "run_metadata.json"
+    # run_config.eval_results = final_result
+    run_config.eval_results = "placeholder"
+    metadata_path = test_path / "run_metadata.json"
     run_config.save_run_metadata(metadata_path)
 
     return run_config
@@ -217,13 +213,14 @@ def main() -> None:
     datasets = DataSet.load_all()
     tools: list[Iterable] = [run_terminal_command]
 
-    default_run_logs_root = Path(os.getenv("RUN_LOGS_ROOT", "./run-logs")).expanduser()
+    default_run_logs_root = Path(os.getenv("RUN_LOGS_ROOT"))
 
     for task in datasets:
         if task.task_id != "alzheimer-mouse":
             continue
         run_hash = f"{task.task_id}-{datetime.now().isoformat()}"
         run_config = RunConfig(
+            run_hash=run_hash,
             timestamp=datetime.now(),
             task_id=task.task_id,
             task_prompt=task.task_prompt,
@@ -237,12 +234,11 @@ def main() -> None:
             model="azure",
             run_logs_root=default_run_logs_root,
             data_path=Path(task.path) if task.path else None,
-            run_hash=run_hash,
         )
 
         print(f"Processing task: {task.task_id} at {task.path}")
         result = evaluate_task(run_config)
-        print(f"Completed evaluation for {task.task_id}: {result}")
+        print(f"Completed evaluation for {task.task_id}")
 
 
 if __name__ == "__main__":

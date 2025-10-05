@@ -9,6 +9,7 @@ from judge_agent import EvaluationResults, EvaluationResultsGiab
 
 @dataclass
 class RunConfig:
+    run_hash: str
     timestamp: datetime
     task_id: str
     task_prompt: str
@@ -27,7 +28,6 @@ class RunConfig:
     output_tokens: float = 0.0
     run_logs_root: Optional[Path] = None
     data_path: Optional[Path] = None
-    run_hash: Optional[str] = None
 
     def save_run_metadata(self, file_path: Path) -> None:
         """Save metadata about the experiment run.
@@ -47,6 +47,7 @@ class RunConfig:
             return results
 
         metadata = {
+            "run_hash": self.run_hash,
             "timestamp": self.timestamp.isoformat(),
             "task_id": self.task_id,
             "task_prompt": self.task_prompt,
@@ -65,7 +66,6 @@ class RunConfig:
             "eval_results": _serialize_eval_results(self.eval_results),
             "run_logs_root": str(self.run_logs_root) if self.run_logs_root else None,
             "data_path": str(self.data_path) if self.data_path else None,
-            "run_hash": self.run_hash,
         }
 
         file_path.parent.mkdir(parents=True, exist_ok=True)

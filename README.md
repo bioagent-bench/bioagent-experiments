@@ -1,16 +1,16 @@
 # bioagent-experiments
 Experiments for bioagent benchmark
 
-```bash
-docker build -t bioagent .
-```
-```bash
-docker run -it -v $(pwd):/app bioagent
-```
-
+## Setup
+1. The project is run through uv package manager
 ```bash
 uv sync
 ```
+
+2. Define where you want to store the run logs
+```bash
+export RUN_LOGS_ROOT=/home/user/bioagent-logs/
+
 
 Run telemetry 
 ```bash
