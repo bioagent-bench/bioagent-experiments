@@ -1,8 +1,8 @@
 import json
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Optional
 
 from judge_agent import EvaluationResults, EvaluationResultsGiab
 
@@ -25,6 +25,9 @@ class RunConfig:
     steps: int = 0 
     input_tokens: float = 0.0
     output_tokens: float = 0.0
+    run_logs_root: Optional[Path] = None
+    data_path: Optional[Path] = None
+    run_hash: Optional[str] = None
 
     def save_run_metadata(self, file_path: Path) -> None:
         """Save metadata about the experiment run.
@@ -60,6 +63,9 @@ class RunConfig:
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "eval_results": _serialize_eval_results(self.eval_results),
+            "run_logs_root": str(self.run_logs_root) if self.run_logs_root else None,
+            "data_path": str(self.data_path) if self.data_path else None,
+            "run_hash": self.run_hash,
         }
 
         file_path.parent.mkdir(parents=True, exist_ok=True)
