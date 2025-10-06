@@ -91,41 +91,29 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
     outputs_root = run_path / "outputs"
     results_root = run_path / "results"
 
-    sandbox = DockerSandbox(
-        volume_path=None,
-        run_hash=run_config.run_hash,
-        image_tag=run_config.task_id,
-    )
-
-    sandbox_code = """
-from pathlib import Path
-
-output_dir = Path('/workspace/output')
-results_dir = Path('/workspace/results')
-output_dir.mkdir(parents=True, exist_ok=True)
-results_dir.mkdir(parents=True, exist_ok=True)
-"""
-
-    try:
-        sandbox_result = sandbox.run_code(
-            code=sandbox_code,
-            task_data_path=str(inputs_root),
-            output_path=str(outputs_root),
-            results_path=str(results_root),
-        )
-    finally:
-        sandbox.cleanup()
-
     input_data = glob_input_data(inputs_root / "data", inputs_root / "reference")
 
-    # agent = CodeAgent(
-    #     max_steps=run_config.max_steps,
-    #     model=create_azure_model(),
-    #     tools=run_config.tools,
-    #     additional_authorized_imports=["*"],
-    #     planning_interval=run_config.planning_interval,
-    #     return_full_result=True,
-    # )
+    data_dir = inputs_root / "data"
+    reference_dir = inputs_root / "reference"
+    executor_kwargs: dict[str, str] = {
+        "output_path": str(outputs_root),
+        "results_path": str(results_root),
+    }
+    if data_dir.exists():
+        executor_kwargs["data_path"] = str(data_dir)
+    if reference_dir.exists():
+        executor_kwargs["reference_path"] = str(reference_dir)
+
+    agent = CodeAgent(
+        max_steps=run_config.max_steps,
+        model=create_azure_model(),
+        tools=run_config.tools,
+        additional_authorized_imports=["*"],
+        planning_interval=run_config.planning_interval,
+        return_full_result=True,
+        executor_type="docker",
+        executor_kwargs=executor_kwargs,
+    )
     # agent.prompt_templates["system_prompt"] = run_config.system_prompt
     # results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
 
