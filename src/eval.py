@@ -2,9 +2,10 @@
 import json
 import os
 import shutil
+import socket
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 from openinference.instrumentation.smolagents import SmolagentsInstrumentor
 from phoenix.otel import register
@@ -12,7 +13,6 @@ from smolagents import CodeAgent
 from opentelemetry import trace
 
 from dataset import DataSet
-from docker_sandbox import DockerSandbox
 from judge_agent import (
     EvaluationResults,
     build_judge_prompt_csv,
@@ -71,6 +71,21 @@ def glob_input_data(*input_dirs: Path) -> list[Path]:
 
     return sorted(files)
 
+
+def allocate_local_port(host: str = "127.0.0.1") -> int:
+    """Reserve a free TCP port on the given host.
+
+    Args:
+        host (str): Host interface used for the ephemeral bind.
+
+    Returns:
+        int: Available port number on the provided host.
+    """
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((host, 0))
+        return int(sock.getsockname()[1])
+
 def evaluate_task(run_config: RunConfig) -> RunConfig:
     """Run a single dataset evaluation using the provided configuration.
 
@@ -95,7 +110,7 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
 
     data_dir = inputs_root / "data"
     reference_dir = inputs_root / "reference"
-    executor_kwargs: dict[str, str] = {
+    executor_kwargs: dict[str, Any] = {
         "output_path": str(outputs_root),
         "results_path": str(results_root),
     }
@@ -103,6 +118,37 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
         executor_kwargs["data_path"] = str(data_dir)
     if reference_dir.exists():
         executor_kwargs["reference_path"] = str(reference_dir)
+
+    safe_task_id = "".join(ch if ch.isalnum() else "-" for ch in run_config.task_id.lower())
+    condensed_task_id = "-".join(part for part in safe_task_id.split("-") if part)
+    image_name = f"bioagent-kernel-{condensed_task_id}" if condensed_task_id else "bioagent-kernel"
+    container_labels = {
+        "bioagent.executor": "docker",
+        "bioagent.task": run_config.task_id,
+        "bioagent.run_timestamp": run_timestamp,
+    }
+    container_name = f"{image_name}-{run_timestamp}"
+
+    docker_host = "127.0.0.1"
+    docker_port = allocate_local_port(docker_host)
+
+    executor_kwargs.update(
+        {
+            "host": docker_host,
+            "port": docker_port,
+            "image_name": image_name,
+            "build_new_image": False,
+            "cleanup_labels": container_labels.copy(),
+            "cleanup_container_name": container_name,
+            "cleanup_host": docker_host,
+            "cleanup_port": docker_port,
+            "container_run_kwargs": {
+                "name": container_name,
+                "labels": container_labels,
+                "ports": {"8888/tcp": (docker_host, docker_port)},
+            },
+        }
+    )
 
     agent = CodeAgent(
         max_steps=run_config.max_steps,
@@ -114,6 +160,15 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
         executor_type="docker",
         executor_kwargs=executor_kwargs,
     )
+    try:
+        agent.run("Run the ls command")
+    finally:
+        python_executor = getattr(agent, "python_executor", None)
+        try:
+            if python_executor and hasattr(python_executor, "cleanup"):
+                python_executor.cleanup()
+        except Exception as exc:
+            print(f"Executor cleanup failed: {exc}")
     # agent.prompt_templates["system_prompt"] = run_config.system_prompt
     # results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
 
@@ -187,7 +242,7 @@ def main() -> None:
             timestamp=datetime.now(),
             task_id=task.task_id,
             task_prompt=task.task_prompt,
-            max_steps=1,
+            max_steps=2,
             planning_interval=1,
             num_tools=len(tools),
             tools=tools,
