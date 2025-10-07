@@ -13,7 +13,6 @@ dependencies = [
     "e2b-code-interpreter>=2.1.0",
     "websocket>=0.2.1",
     "websocket-client>=1.8.0",
-    "smolagents",
 ]
 
 [tool.uv.workspace]
@@ -23,7 +22,6 @@ members = [
 
 [tool.uv.sources]
 bioagent-experiments = { workspace = true }
-smolagents = { path = "../smolagents" }
 
 [dependency-groups]
 dev = [
