@@ -2,10 +2,10 @@
 import json
 import os
 import shutil
-import socket
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 from openinference.instrumentation.smolagents import SmolagentsInstrumentor
 from phoenix.otel import register
@@ -72,19 +72,51 @@ def glob_input_data(*input_dirs: Path) -> list[Path]:
     return sorted(files)
 
 
-def allocate_local_port(host: str = "127.0.0.1") -> int:
-    """Reserve a free TCP port on the given host.
+def copy_inputs_to_run_directory(source_root: Path, destination_root: Path) -> None:
+    """Copy evaluation inputs into the run directory.
 
     Args:
-        host (str): Host interface used for the ephemeral bind.
+        source_root (Path): Directory containing the task inputs.
+        destination_root (Path): Destination directory under the run path.
 
     Returns:
-        int: Available port number on the provided host.
+        None: This function copies files as a side effect.
     """
 
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind((host, 0))
-        return int(sock.getsockname()[1])
+    destination_root.mkdir(parents=True, exist_ok=True)
+    source = Path(source_root)
+    if not source.exists():
+        return
+
+    for item in source.iterdir():
+        target = destination_root / item.name
+        if item.is_dir():
+            shutil.copytree(item, target, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, target)
+
+
+@contextmanager
+def isolated_run_environment(run_path: Path, inputs_root: Path) -> Iterator[Path]:
+    """Provide an isolated working directory for agent execution.
+
+    Args:
+        run_path (Path): Root directory for the current run.
+        inputs_root (Path): Source directory containing task inputs.
+
+    Yields:
+        Iterator[Path]: Path to the copied inputs directory inside the run path.
+    """
+
+    copied_inputs_root = run_path / "inputs"
+    copy_inputs_to_run_directory(inputs_root, copied_inputs_root)
+
+    previous_cwd = Path.cwd()
+    os.chdir(run_path)
+    try:
+        yield copied_inputs_root
+    finally:
+        os.chdir(previous_cwd)
 
 def evaluate_task(run_config: RunConfig) -> RunConfig:
     """Run a single dataset evaluation using the provided configuration.
@@ -106,69 +138,33 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
     outputs_root = run_path / "outputs"
     results_root = run_path / "results"
 
-    input_data = glob_input_data(inputs_root / "data", inputs_root / "reference")
+    input_data: list[Path] = []
 
-    data_dir = inputs_root / "data"
-    reference_dir = inputs_root / "reference"
-    executor_kwargs: dict[str, Any] = {
-        "output_path": str(outputs_root),
-        "results_path": str(results_root),
-    }
-    if data_dir.exists():
-        executor_kwargs["data_path"] = str(data_dir)
-    if reference_dir.exists():
-        executor_kwargs["reference_path"] = str(reference_dir)
+    with isolated_run_environment(run_path, inputs_root) as run_inputs_root:
+        data_dir = run_inputs_root / "data"
+        reference_dir = run_inputs_root / "reference"
 
-    safe_task_id = "".join(ch if ch.isalnum() else "-" for ch in run_config.task_id.lower())
-    condensed_task_id = "-".join(part for part in safe_task_id.split("-") if part)
-    image_name = f"bioagent-kernel-{condensed_task_id}" if condensed_task_id else "bioagent-kernel"
-    container_labels = {
-        "bioagent.executor": "docker",
-        "bioagent.task": run_config.task_id,
-        "bioagent.run_timestamp": run_timestamp,
-    }
-    container_name = f"{image_name}-{run_timestamp}"
-
-    docker_host = "127.0.0.1"
-    docker_port = allocate_local_port(docker_host)
-
-    executor_kwargs.update(
-        {
-            "host": docker_host,
-            "port": docker_port,
-            "image_name": image_name,
-            "build_new_image": False,
-            "cleanup_labels": container_labels.copy(),
-            "cleanup_container_name": container_name,
-            "cleanup_host": docker_host,
-            "cleanup_port": docker_port,
-            "container_run_kwargs": {
-                "name": container_name,
-                "labels": container_labels,
-                "ports": {"8888/tcp": (docker_host, docker_port)},
-            },
+        executor_kwargs: dict[str, Any] = {
+            "output_path": str(outputs_root),
+            "results_path": str(results_root),
         }
-    )
+        if data_dir.exists():
+            executor_kwargs["data_path"] = str(data_dir)
+        if reference_dir.exists():
+            executor_kwargs["reference_path"] = str(reference_dir)
 
-    agent = CodeAgent(
-        max_steps=run_config.max_steps,
-        model=create_azure_model(),
-        tools=run_config.tools,
-        additional_authorized_imports=["*"],
-        planning_interval=run_config.planning_interval,
-        return_full_result=True,
-        executor_type="docker",
-        executor_kwargs=executor_kwargs,
-    )
-    try:
-        agent.run("Run the ls command")
-    finally:
-        python_executor = getattr(agent, "python_executor", None)
-        try:
-            if python_executor and hasattr(python_executor, "cleanup"):
-                python_executor.cleanup()
-        except Exception as exc:
-            print(f"Executor cleanup failed: {exc}")
+        input_data = glob_input_data(data_dir, reference_dir)
+
+        agent = CodeAgent(
+            max_steps=run_config.max_steps,
+            model=create_azure_model(),
+            tools=run_config.tools,
+            additional_authorized_imports=["*"],
+            planning_interval=run_config.planning_interval,
+            return_full_result=True,
+        )
+        agent.run("Return the contents of the directory")
+    
     # agent.prompt_templates["system_prompt"] = run_config.system_prompt
     # results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
 
