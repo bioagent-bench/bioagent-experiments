@@ -1,36 +1,59 @@
+from __future__ import annotations
 
-import json
+import argparse
 import os
 import shutil
 from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterator
 
 from openinference.instrumentation.smolagents import SmolagentsInstrumentor
 from phoenix.otel import register
 from smolagents import CodeAgent
-from opentelemetry import trace
 
-from dataset import DataSet
-from judge_agent import (
-    EvaluationResults,
+from .judge_agent import (
     build_judge_prompt_csv,
     build_judge_prompt_giab,
     eval_giab_metrics,
     parse_agent_outputs,
     parse_agent_results,
 )
-from logs import RunConfig
-from models import create_azure_model
-from system_prompts import prompts
-from tools import run_terminal_command
+from .logs import RunConfig
+from .models import load_model
+from .tools import run_terminal_command
 
 
 SmolagentsInstrumentor().instrument()
-register(
-    project_name="bioagent-experiments"
-)
+register(project_name="bioagent-experiments")
+
+TOOLS_REGISTRY: dict[str, Any] = {
+    "run_terminal_command": run_terminal_command,
+}
+
+
+def load_run_config(config_path: Path) -> RunConfig:
+    """Load a ``RunConfig`` instance from a metadata JSON file.
+
+    Args:
+        config_path (Path): Path to the run metadata JSON file.
+
+    Returns:
+        RunConfig: Deserialized run configuration.
+    """
+
+    run_config = RunConfig.load_run_metadata(config_path)
+
+    tools: list[Any] = []
+    for tool_name in run_config.tool_names:
+        tool = TOOLS_REGISTRY.get(tool_name)
+        if tool is None:
+            raise ValueError(f"Unknown tool requested in configuration: {tool_name}")
+        tools.append(tool)
+
+    run_config.tools = tools
+    run_config.num_tools = len(tools)
+
+    return run_config
 
 def create_dirs(prefix: Path) -> None:
     """Create standard output directories for an evaluation run.
@@ -128,13 +151,16 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
         RunConfig: Updated run configuration with evaluation results.
     """
 
-    run_timestamp = run_config.timestamp.strftime("%Y%m%d-%H%M%S")
-    run_logs_root = run_config.run_logs_root or Path("./run-logs")
-    experiment_root = Path(run_logs_root) / run_config.experiment_name / run_config.task_id
-    run_path = experiment_root / run_timestamp
+    if run_config.data_path is None:
+        raise ValueError("RunConfig.data_path must be set before running an evaluation.")
+
+    inputs_root = Path(run_config.data_path)
+    if not inputs_root.exists():
+        raise FileNotFoundError(f"Input data directory does not exist: {inputs_root}")
+
+    run_path = run_config.run_path
     create_dirs(run_path)
 
-    inputs_root = run_config.data_path
     outputs_root = run_path / "outputs"
     results_root = run_path / "results"
 
@@ -155,15 +181,15 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
 
         input_data = glob_input_data(data_dir, reference_dir)
 
-        agent = CodeAgent(
-            max_steps=run_config.max_steps,
-            model=create_azure_model(),
-            tools=run_config.tools,
-            additional_authorized_imports=["*"],
-            planning_interval=run_config.planning_interval,
-            return_full_result=True,
-        )
-        agent.run("Return the contents of the directory")
+        # agent = CodeAgent(
+        #     max_steps=run_config.max_steps,
+        #     model=load_model(run_config.model),
+        #     tools=run_config.tools,
+        #     additional_authorized_imports=["*"],
+        #     planning_interval=run_config.planning_interval,
+        #     return_full_result=True,
+        # )
+        # agent.run("Return the contents of the directory")
     
     # agent.prompt_templates["system_prompt"] = run_config.system_prompt
     # results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
@@ -218,41 +244,29 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
     return run_config
 
 
-def main() -> None:
-    """Execute evaluations configured via ``RunConfig`` entries."""
+def run_from_config(config_path: Path) -> RunConfig:
+    """Load a run configuration from disk and execute the evaluation."""
 
-    datasets = DataSet.load_all(
-        metadata_path=Path("~/bioagent-bench/src/task_metadata.json").expanduser(),
-        data_root=Path("~/bioagent-data").expanduser(),
+    run_config = load_run_config(config_path)
+    return evaluate_task(run_config)
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the evaluation script."""
+
+    parser = argparse.ArgumentParser(description="Run a single evaluation loop.")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help="Path to the serialized RunConfig JSON file.",
     )
-    tools: list[Iterable] = [run_terminal_command]
+    return parser.parse_args()
 
-    default_run_logs_root = Path(os.getenv("RUN_LOGS_ROOT"))
 
-    for task in datasets:
-        if task.task_id != "alzheimer-mouse":
-            continue
-        run_hash = f"{task.task_id}-{datetime.now().isoformat()}"
-        run_config = RunConfig(
-            run_hash=run_hash,
-            timestamp=datetime.now(),
-            task_id=task.task_id,
-            task_prompt=task.task_prompt,
-            max_steps=2,
-            planning_interval=1,
-            num_tools=len(tools),
-            tools=tools,
-            system_prompt=prompts["v1"],
-            system_prompt_name="v1",
-            experiment_name="open-environment",
-            model="azure",
-            run_logs_root=default_run_logs_root,
-            data_path=Path(task.path),
-        )
-
-        print(f"Processing task: {task.task_id} at {task.path}")
-        result = evaluate_task(run_config)
-        print(f"Completed evaluation for {task.task_id}")
+def main() -> None:
+    args = parse_args()
+    run_from_config(args.config)
 
 
 if __name__ == "__main__":

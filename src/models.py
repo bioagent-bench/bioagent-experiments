@@ -1,3 +1,5 @@
+from typing import Any
+
 from openai import AzureOpenAI
 from smolagents import AzureOpenAIServerModel, OpenAIServerModel
 
@@ -63,5 +65,24 @@ model_loader_mapping = {
     'azure': create_azure_model,
     'llama': create_llama_model,
     'claude': create_claude_model,
-    'gemini': create_gemini_model
+    'gemini': create_gemini_model,
 }
+
+
+def load_model(model_name: str, **kwargs: Any) -> Any:
+    """Load a model instance using the configured loader mapping.
+
+    Args:
+        model_name (str): Identifier for the desired model (e.g., ``"azure"``).
+        **kwargs: Additional keyword arguments forwarded to the model loader.
+
+    Returns:
+        Any: Instantiated model client returned by the registered loader.
+    """
+
+    loader = model_loader_mapping.get(model_name)
+    if loader is None:
+        available = ", ".join(sorted(model_loader_mapping))
+        raise ValueError(f"Unknown model '{model_name}'. Available models: {available}")
+
+    return loader(**kwargs)
