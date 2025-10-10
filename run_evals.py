@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import hashlib
 import json
 import subprocess
 import tempfile
@@ -21,7 +20,7 @@ from src.system_prompts import prompts
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-RUN_LOGS_ROOT = Path(os.getenv("RUN_LOGS_ROOT"))
+RUN_LOGS = Path(os.getenv("RUN_LOGS"))
 
 
 METADATA_PATH = Path("/home/dionizije/bioagent-bench/src/task_metadata.json")
@@ -35,6 +34,20 @@ TOOL_NAMES: Sequence[str] = (
     "run_terminal_command",
 )
 BASE_ENV = "base"
+
+
+def _generate_run_hash(_: str, length: int = 7) -> str:
+    """Generate a short, random identifier for a run configuration.
+
+    Args:
+        _ (str): Unused input retained for compatibility.
+        length (int): Desired number of characters in the identifier.
+
+    Returns:
+        str: Numeric run hash of the requested length.
+    """
+
+    return str(uuid.uuid4().int % (10**length)).zfill(length)
 
 
 def _resolve_mamba_executable() -> str:
@@ -51,7 +64,7 @@ def _resolve_mamba_executable() -> str:
 def _build_run_config(
     task: DataSet,
     system_prompt_name: str,
-    run_logs_root: Path | None,
+    run_logs: Path,
     max_steps: int,
     planning_interval: int,
     experiment_name: str,
@@ -63,7 +76,7 @@ def _build_run_config(
     Args:
         task (DataSet): Dataset metadata describing the task to evaluate.
         system_prompt_name (str): Key into ``system_prompts.prompts``.
-        run_logs_root (Path | None): Optional base directory for run logs.
+        run_logs (Path): Base directory for runs and logs.
         max_steps (int): Maximum agent steps.
         planning_interval (int): Planning interval for the agent.
         experiment_name (str): Name of the experiment.
@@ -73,33 +86,15 @@ def _build_run_config(
     Returns:
         RunConfig: Configuration describing the run metadata.
     """
-
-    if task.path is None:
-        raise ValueError(f"Task '{task.task_id}' is missing a data directory and cannot be evaluated.")
-
     timestamp = datetime.now()
     system_prompt = prompts.get(system_prompt_name)
-    if system_prompt is None:
-        raise KeyError(f"Unknown system prompt name: {system_prompt_name}")
 
-    run_logs_root_path = run_logs_root or Path("./run-logs")
-    experiment_root = run_logs_root_path / experiment_name / task.task_id
-    run_timestamp = timestamp.strftime("%Y%m%d-%H%M%S")
-    run_path = experiment_root / run_timestamp
+    run_hash =  str(uuid.uuid4())
+    run_root = run_logs / experiment_name / run_hash
+    metadata_path = run_logs / f"{run_hash}.json"
 
-    content_to_hash = json.dumps(
-        {
-            "task_id": task.task_id,
-            "timestamp": timestamp.isoformat(),
-            "experiment_name": experiment_name,
-            "model": model,
-            "system_prompt_name": system_prompt_name,
-        },
-        sort_keys=True,
-    )
-    run_hash = hashlib.sha256(content_to_hash.encode("utf-8")).hexdigest()[:16]
-
-    config = RunConfig(
+    run_config = RunConfig(
+        metadata_path=metadata_path,
         run_hash=run_hash,
         timestamp=timestamp,
         task_id=task.task_id,
@@ -112,30 +107,11 @@ def _build_run_config(
         system_prompt_name=system_prompt_name,
         experiment_name=experiment_name,
         model=model,
-        run_path=run_path,
-        run_logs_root=run_logs_root_path,
-        data_path=Path(task.path),
+        run_dir_path=run_root,
+        data_path=Path(task.path) if task.path else None,
     )
 
-    metadata_filename = f"{run_hash}-run_metadata.json"
-    config.metadata_path = run_path / metadata_filename
-
-    return config
-
-
-def _validate_model_name(model_name: str) -> None:
-    """Ensure the configured model exists in ``model_loader_mapping``.
-
-    Args:
-        model_name (str): Identifier passed via ``MODEL_NAME``.
-
-    Returns:
-        None: Raises ``ValueError`` if the model is not registered.
-    """
-
-    if model_name not in model_loader_mapping:
-        available = ", ".join(sorted(model_loader_mapping))
-        raise ValueError(f"Unknown model '{model_name}'. Available models: {available}")
+    return run_config
 
 
 @contextmanager
@@ -207,10 +183,13 @@ def open_environment() -> None:
     )
 
     for task in datasets:
+        if task.task_id != "alzheimer-mouse":
+            continue
+
         run_config = _build_run_config(
             task=task,
             system_prompt_name=SYSTEM_PROMPT,
-            run_logs_root=RUN_LOGS_ROOT,
+            run_logs=RUN_LOGS,
             max_steps=MAX_STEPS,
             planning_interval=PLANNING_INTERVAL,
             experiment_name=EXPERIMENT_NAME,
@@ -218,7 +197,7 @@ def open_environment() -> None:
             tool_names=TOOL_NAMES,
         )
 
-        run_config.run_path.mkdir(parents=True, exist_ok=True)
+        run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
         run_config.save_run_metadata()
 
         with temporary_mamba_environment() as env_name:

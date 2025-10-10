@@ -9,7 +9,7 @@ uv sync
 
 2. Define where you want to store the run logs
 ```bash
-export RUN_LOGS_ROOT=/home/user/bioagent-logs/
+export RUN_LOGS=/home/user/run_logs/
 
 
 Run telemetry 

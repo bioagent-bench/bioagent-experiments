@@ -2,7 +2,7 @@ from typing import Any
 from smolagents import tool
 
 @tool
-def run_terminal_command(command: str) -> dict:
+def run_terminal_command(command: str) -> dict[str, Any]:
     """
     Run a terminal command and return stdout, stderr, and exit code.
 

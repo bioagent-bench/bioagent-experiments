@@ -7,9 +7,19 @@ from typing import Any, List, Optional
 from .judge_agent import EvaluationResults, EvaluationResultsGiab
 
 
+def _serialize_eval_results(results: EvaluationResults | EvaluationResultsGiab | None) -> Any:
+    """We need to convert the result classes to JSON"""
+    if results is None:
+        return None
+    if is_dataclass(results):
+        return asdict(results)
+    return results
+
+
 @dataclass
 class RunConfig:
     run_hash: str
+    metadata_path: Path
     timestamp: datetime
     task_id: str
     task_prompt: str
@@ -21,41 +31,27 @@ class RunConfig:
     system_prompt_name: str
     experiment_name: str
     model: str
-    run_path: Path
     duration: float = 0.0
     eval_results: EvaluationResults | EvaluationResultsGiab | None = None
     steps: int = 0
     input_tokens: float = 0.0
     output_tokens: float = 0.0
-    run_logs_root: Optional[Path] = None
+    run_dir_path: Optional[Path] = None
     data_path: Optional[Path] = None
-    metadata_path: Optional[Path] = None
     tools: List[Any] = field(default_factory=list, repr=False)
 
-    def save_run_metadata(self, file_path: Optional[Path] = None) -> None:
+    def save_run_metadata(self) -> None:
         """Save metadata about the experiment run.
 
-        Args:
-            file_path (Path | None): Path to the JSON file where metadata is stored.
-                If ``None``, ``self.metadata_path`` must be set.
+        Raises:
+            ValueError: If ``self.metadata_path`` is not defined.
 
         Returns:
-            None: This method writes metadata to ``file_path``.
+            None: This method writes metadata to ``self.metadata_path``.
         """
-
-        target_path = file_path or self.metadata_path
-        if target_path is None:
-            raise ValueError("metadata_path must be provided when saving run metadata.")
-
-        def _serialize_eval_results(results: EvaluationResults | EvaluationResultsGiab | None) -> Any:
-            if results is None:
-                return None
-            if is_dataclass(results):
-                return asdict(results)
-            return results
-
         metadata = {
             "run_hash": self.run_hash,
+            "metadata_path": str(self.metadata_path),
             "timestamp": self.timestamp.isoformat(),
             "task_id": self.task_id,
             "task_prompt": self.task_prompt,
@@ -73,15 +69,12 @@ class RunConfig:
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "eval_results": _serialize_eval_results(self.eval_results),
-            "run_logs_root": str(self.run_logs_root) if self.run_logs_root else None,
-            "data_path": str(self.data_path) if self.data_path else None,
-            "run_path": str(self.run_path),
-            "metadata_path": str(target_path),
+            "run_dir_path": str(self.run_dir_path),
+            "data_path": str(self.data_path),
         }
 
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-        self.metadata_path = target_path
+        self.metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        self.metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
     @classmethod
     def load_run_metadata(cls, file_path: Path) -> "RunConfig":
@@ -95,15 +88,16 @@ class RunConfig:
         """
 
         payload = json.loads(file_path.read_text(encoding="utf-8"))
-
         timestamp_raw = payload.get("timestamp")
-        if timestamp_raw is None:
-            raise ValueError("Run metadata is missing 'timestamp'.")
 
         tool_names = payload.get("tool_names") or payload.get("tools") or []
 
+        run_dir_path_raw = payload.get("run_dir_path")
+        data_path_raw = payload.get("data_path")
+
         run_config = cls(
             run_hash=payload["run_hash"],
+            metadata_path=file_path,
             timestamp=datetime.fromisoformat(timestamp_raw),
             task_id=payload["task_id"],
             task_prompt=payload["task_prompt"],
@@ -115,15 +109,13 @@ class RunConfig:
             system_prompt_name=payload["system_prompt_name"],
             experiment_name=payload["experiment_name"],
             model=payload["model"],
-            run_path=Path(payload["run_path"]),
             duration=payload.get("duration", 0.0),
             eval_results=payload.get("eval_results"),
             steps=payload.get("steps", 0),
             input_tokens=payload.get("input_tokens", 0.0),
             output_tokens=payload.get("output_tokens", 0.0),
-            run_logs_root=Path(payload["run_logs_root"]) if payload.get("run_logs_root") else None,
-            data_path=Path(payload["data_path"]) if payload.get("data_path") else None,
-            metadata_path=file_path,
+            run_dir_path=Path(run_dir_path_raw),
+            data_path=Path(data_path_raw),
         )
 
         return run_config

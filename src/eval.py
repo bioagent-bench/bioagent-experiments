@@ -111,7 +111,11 @@ def copy_inputs_to_run_directory(source_root: Path, destination_root: Path) -> N
     if not source.exists():
         return
 
+    excluded_names: set[str] = {"results"}
+
     for item in source.iterdir():
+        if item.name in excluded_names:
+            continue
         target = destination_root / item.name
         if item.is_dir():
             shutil.copytree(item, target, dirs_exist_ok=True)
@@ -120,26 +124,27 @@ def copy_inputs_to_run_directory(source_root: Path, destination_root: Path) -> N
 
 
 @contextmanager
-def isolated_run_environment(run_path: Path, inputs_root: Path) -> Iterator[Path]:
+def isolated_run_environment(run_dir_path: Path, inputs_root: Path) -> Iterator[Path]:
     """Provide an isolated working directory for agent execution.
 
     Args:
-        run_path (Path): Root directory for the current run.
+        run_dir_path (Path): Root directory for the current run.
         inputs_root (Path): Source directory containing task inputs.
 
     Yields:
         Iterator[Path]: Path to the copied inputs directory inside the run path.
     """
 
-    copied_inputs_root = run_path / "inputs"
+    copied_inputs_root = run_dir_path / "inputs"
     copy_inputs_to_run_directory(inputs_root, copied_inputs_root)
 
     previous_cwd = Path.cwd()
-    os.chdir(run_path)
+    os.chdir(run_dir_path)
     try:
         yield copied_inputs_root
     finally:
         os.chdir(previous_cwd)
+
 
 def evaluate_task(run_config: RunConfig) -> RunConfig:
     """Run a single dataset evaluation using the provided configuration.
@@ -158,15 +163,19 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
     if not inputs_root.exists():
         raise FileNotFoundError(f"Input data directory does not exist: {inputs_root}")
 
-    run_path = run_config.run_path
-    create_dirs(run_path)
+    run_dir_path = run_config.run_dir_path
+    log_path = run_config.metadata_path
 
-    outputs_root = run_path / "outputs"
-    results_root = run_path / "results"
+    run_dir_path.mkdir(parents=True, exist_ok=True)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    create_dirs(run_dir_path)
+
+    outputs_root = run_dir_path / "outputs"
+    results_root = run_dir_path / "results"
 
     input_data: list[Path] = []
 
-    with isolated_run_environment(run_path, inputs_root) as run_inputs_root:
+    with isolated_run_environment(run_dir_path, inputs_root) as run_inputs_root:
         data_dir = run_inputs_root / "data"
         reference_dir = run_inputs_root / "reference"
 
@@ -181,16 +190,16 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
 
         input_data = glob_input_data(data_dir, reference_dir)
 
-        # agent = CodeAgent(
-        #     max_steps=run_config.max_steps,
-        #     model=load_model(run_config.model),
-        #     tools=run_config.tools,
-        #     additional_authorized_imports=["*"],
-        #     planning_interval=run_config.planning_interval,
-        #     return_full_result=True,
-        # )
-        # agent.run("Return the contents of the directory")
-    
+        agent = CodeAgent(
+            max_steps=run_config.max_steps,
+            model=load_model(run_config.model),
+            tools=run_config.tools,
+            additional_authorized_imports=["*"],
+            planning_interval=run_config.planning_interval,
+            return_full_result=True,
+        )
+        results = agent.run("Return the contents of the directory")
+
     # agent.prompt_templates["system_prompt"] = run_config.system_prompt
     # results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
 
@@ -203,12 +212,12 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
     # run_config.output_tokens = results.token_usage.output_tokens
     # run_config.duration = results.timing.duration / 60 # in minutes
     # run_config.steps = len(results.steps)
-    agent_output_tree = parse_agent_outputs(run_path)
+    agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "results")
 
     if run_config.task_id == "giab":
         agent_results = eval_giab_metrics(
-            run_path / "results",
-            run_path / "results",
+            run_config.run_dir_path / "results",
+            run_config.run_dir_path / "results",
             inputs_root / "data" / "Agilent_v7.chr.bed",
             inputs_root / "reference" / "Homo_sapiens_assembly38.fasta",
         )
@@ -219,8 +228,8 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
             agent_results,
         )
     else:
-        agent_results = parse_agent_results(run_path / "results")
-        truth_results = parse_agent_results(run_path / "results")
+        agent_results = parse_agent_results(run_config.run_dir_path / "results")
+        truth_results = parse_agent_results(run_config.data_path / "results")
         agent_prompt = build_judge_prompt_csv(
             input_data,
             run_config.task_prompt,
@@ -238,8 +247,7 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
 
     # run_config.eval_results = final_result
     run_config.eval_results = "placeholder"
-    metadata_path = run_path / "run_metadata.json"
-    run_config.save_run_metadata(metadata_path)
+    run_config.save_run_metadata()
 
     return run_config
 
