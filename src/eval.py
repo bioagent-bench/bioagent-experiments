@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 from contextlib import contextmanager
@@ -10,8 +11,10 @@ from typing import Any, Iterator
 from openinference.instrumentation.smolagents import SmolagentsInstrumentor
 from phoenix.otel import register
 from smolagents import CodeAgent
+from opentelemetry import trace
 
 from .judge_agent import (
+    EvaluationResults,
     build_judge_prompt_csv,
     build_judge_prompt_giab,
     eval_giab_metrics,
@@ -19,7 +22,7 @@ from .judge_agent import (
     parse_agent_results,
 )
 from .logs import RunConfig
-from .models import load_model
+from .models import create_azure_model, load_model
 from .tools import run_terminal_command
 
 
@@ -170,84 +173,85 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     create_dirs(run_dir_path)
 
-    outputs_root = run_dir_path / "outputs"
-    results_root = run_dir_path / "results"
+    # Add run_hash as custom attribute to Phoenix traces
+    tracer = trace.get_tracer(__name__)
+    with tracer.start_as_current_span("bioagent_evaluation") as span:
+        span.set_attribute("run_hash", run_config.run_hash)
+        span.set_attribute("task_id", run_config.task_id)
+        span.set_attribute("experiment_name", run_config.experiment_name)
+        span.set_attribute("model", run_config.model)
 
-    input_data: list[Path] = []
+        outputs_root = run_dir_path / "outputs"
+        results_root = run_dir_path / "results"
 
-    with isolated_run_environment(run_dir_path, inputs_root) as run_inputs_root:
-        data_dir = run_inputs_root / "data"
-        reference_dir = run_inputs_root / "reference"
+        input_data: list[Path] = []
 
-        executor_kwargs: dict[str, Any] = {
-            "output_path": str(outputs_root),
-            "results_path": str(results_root),
-        }
-        if data_dir.exists():
-            executor_kwargs["data_path"] = str(data_dir)
-        if reference_dir.exists():
-            executor_kwargs["reference_path"] = str(reference_dir)
+        with isolated_run_environment(run_dir_path, inputs_root) as run_inputs_root:
+            data_dir = run_inputs_root / "data"
+            reference_dir = run_inputs_root / "reference"
 
-        input_data = glob_input_data(data_dir, reference_dir)
+            executor_kwargs: dict[str, Any] = {
+                "output_path": str(outputs_root),
+                "results_path": str(results_root),
+            }
+            if data_dir.exists():
+                executor_kwargs["data_path"] = str(data_dir)
+            if reference_dir.exists():
+                executor_kwargs["reference_path"] = str(reference_dir)
 
-        agent = CodeAgent(
-            max_steps=run_config.max_steps,
-            model=load_model(run_config.model),
-            tools=run_config.tools,
-            additional_authorized_imports=["*"],
-            planning_interval=run_config.planning_interval,
-            return_full_result=True,
-        )
-        results = agent.run("Return the contents of the directory")
+            input_data = glob_input_data(data_dir, reference_dir)
 
-    # agent.prompt_templates["system_prompt"] = run_config.system_prompt
-    # results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
+            agent = CodeAgent(
+                max_steps=run_config.max_steps,
+                model=load_model(run_config.model),
+                tools=run_config.tools,
+                additional_authorized_imports=["*"],
+                planning_interval=run_config.planning_interval,
+                return_full_result=True,
+            )
+            agent.prompt_templates["system_prompt"] = run_config.system_prompt
+            results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
 
-    # collect stuff from the results
-    run_config.input_tokens = 0
-    run_config.output_tokens = 0
-    run_config.duration = 0
-    run_config.steps = 0
-    # run_config.input_tokens = results.token_usage.input_tokens
-    # run_config.output_tokens = results.token_usage.output_tokens
-    # run_config.duration = results.timing.duration / 60 # in minutes
-    # run_config.steps = len(results.steps)
-    agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "results")
+        # collect stuff from the results
+        run_config.input_tokens = results.token_usage.input_tokens
+        run_config.output_tokens = results.token_usage.output_tokens
+        run_config.duration = results.timing.duration / 60
+        run_config.steps = len(results.steps)
+        agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "results")
 
-    if run_config.task_id == "giab":
-        agent_results = eval_giab_metrics(
-            run_config.run_dir_path / "results",
-            run_config.run_dir_path / "results",
-            inputs_root / "data" / "Agilent_v7.chr.bed",
-            inputs_root / "reference" / "Homo_sapiens_assembly38.fasta",
-        )
-        agent_prompt = build_judge_prompt_giab(
-            input_data,
-            run_config.task_prompt,
-            agent_output_tree,
-            agent_results,
-        )
-    else:
-        agent_results = parse_agent_results(run_config.run_dir_path / "results")
-        truth_results = parse_agent_results(run_config.data_path / "results")
-        agent_prompt = build_judge_prompt_csv(
-            input_data,
-            run_config.task_prompt,
-            agent_output_tree,
-            agent_results,
-            truth_results,
-        )
+        if run_config.task_id == "giab":
+            agent_results = eval_giab_metrics(
+                run_config.run_dir_path / "results",
+                run_config.run_dir_path / "results",
+                inputs_root / "data" / "Agilent_v7.chr.bed",
+                inputs_root / "reference" / "Homo_sapiens_assembly38.fasta",
+            )
+            judge_prompt = build_judge_prompt_giab(
+                input_data,
+                run_config.task_prompt,
+                agent_output_tree,
+                agent_results,
+            )
+        else:
+            agent_results = parse_agent_results(run_config.run_dir_path / "results")
+            truth_results = parse_agent_results(run_config.data_path / "results")
+            judge_prompt = build_judge_prompt_csv(
+                input_data,
+                run_config.task_prompt,
+                agent_output_tree,
+                agent_results,
+                truth_results,
+            )
 
-    # client = create_azure_model(framework="openai")
-    # response = client.chat.completions.create(
-    #     model="gpt-5-mini",
-    #     messages=[{"role": "user", "content": agent_prompt}],
-    # ).choices[0].message.content
-    # final_result = EvaluationResults(**json.loads(response))
+        client = create_azure_model(framework="openai")
+        response = client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[{"role": "user", "content": judge_prompt}],
+        ).choices[0].message.content
+        final_result = EvaluationResults(**json.loads(response))
 
-    # run_config.eval_results = final_result
-    run_config.eval_results = "placeholder"
-    run_config.save_run_metadata()
+        run_config.eval_results = final_result
+        run_config.save_run_metadata()
 
     return run_config
 

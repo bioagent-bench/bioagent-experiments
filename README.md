@@ -10,9 +10,10 @@ uv sync
 2. Define where you want to store the run logs
 ```bash
 export RUN_LOGS=/home/user/run_logs/
+```
 
 
-Run telemetry 
+3. Run telemetry (Optional)
 ```bash
 python -m phoenix.server.main serve
 ```
