@@ -175,8 +175,7 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
 
     # Add run_hash as custom attribute to Phoenix traces
     tracer = trace.get_tracer(__name__)
-    with tracer.start_as_current_span("bioagent_evaluation") as span:
-        span.set_attribute("run_hash", run_config.run_hash)
+    with tracer.start_as_current_span(run_config.run_hash) as span:
         span.set_attribute("task_id", run_config.task_id)
         span.set_attribute("experiment_name", run_config.experiment_name)
         span.set_attribute("model", run_config.model)
