@@ -245,7 +245,7 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
 
         client = create_azure_model(framework="openai")
         response = client.chat.completions.create(
-            model="gpt-5-mini",
+            model="gpt-5",
             messages=[{"role": "user", "content": judge_prompt}],
         ).choices[0].message.content
         final_result = EvaluationResults(**json.loads(response))

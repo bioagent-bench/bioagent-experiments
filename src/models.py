@@ -11,7 +11,7 @@ def load_keys(prefix):
     with open(f"/home/dionizije/bioagent-experiments/.keys/{prefix}_endpoint.key", "r") as key_file:
         endpoint = key_file.read().strip()
 
-    return api_key, endpoint  
+    return api_key, endpoint
 
 
 def create_azure_model(framework='smolagents'):
@@ -19,7 +19,7 @@ def create_azure_model(framework='smolagents'):
 
     if framework == 'smolagents':
         return AzureOpenAIServerModel(
-            model_id="gpt-5-codex",
+            model_id="gpt-5",
             azure_endpoint=endpoint,
             api_key=api_key,
             api_version="2025-01-01-preview",
