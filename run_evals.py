@@ -134,6 +134,9 @@ def temporary_mamba_environment() -> Iterator[str]:
         "--yes",
         "--name",
         env_name,
+        "r-base",
+        "r-essentials",
+        "-c", "conda-forge",
     ]
     subprocess.run(create_cmd, check=True)
 
@@ -183,9 +186,6 @@ def open_environment() -> None:
     )
 
     for task in datasets:
-        if task.task_id != "alzheimer-mouse":
-            continue
-
         run_config = _build_run_config(
             task=task,
             system_prompt_name=SYSTEM_PROMPT,

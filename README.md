@@ -1,5 +1,9 @@
 # bioagent-experiments
-Experiments for bioagent benchmark
+
+## Environment Setup
+
+The evaluation system uses isolated mamba environments for each run. The LLM is provided with
+Python and R installations from the start.
 
 ## Setup
 1. The project is run through uv package manager
