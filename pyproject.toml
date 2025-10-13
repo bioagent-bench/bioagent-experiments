@@ -10,9 +10,9 @@ dependencies = [
     "arize-phoenix>=11.30.0",
     "openai>=1.109.0",
     "duckdb>=1.4.0",
-    "e2b-code-interpreter>=2.1.0",
     "websocket>=0.2.1",
     "websocket-client>=1.8.0",
+    "smolagents @ git+https://github.com/dionizijefa/smolagents.git",
 ]
 
 [tool.uv.workspace]

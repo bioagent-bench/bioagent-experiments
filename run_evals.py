@@ -15,7 +15,6 @@ from typing import Iterator, Sequence
 
 from src.dataset import DataSet
 from src.logs import RunConfig
-from src.models import model_loader_mapping
 from src.system_prompts import prompts
 
 
@@ -89,8 +88,8 @@ def _build_run_config(
     timestamp = datetime.now()
     system_prompt = prompts.get(system_prompt_name)
 
-    run_hash =  str(uuid.uuid4())
-    run_root = run_logs / experiment_name / run_hash
+    run_hash = str(uuid.uuid4())
+    run_root = run_logs / experiment_name / task.task_id / run_hash
     metadata_path = run_logs / f"{run_hash}.json"
 
     run_config = RunConfig(
@@ -130,28 +129,28 @@ def temporary_mamba_environment() -> Iterator[str]:
 
     create_cmd = [
         executable,
+        "env",
         "create",
         "--yes",
         "--name",
         env_name,
-        "r-base",
-        "r-essentials",
-        "-c", "conda-forge",
+        "--file",
+        "eval-environment.yml",
     ]
-    subprocess.run(create_cmd, check=True)
+    subprocess.run(create_cmd, check=True, cwd=PROJECT_ROOT)
 
     try:
         yield env_name
     finally:
         remove_cmd = [
             executable,
+            "env",
             "remove",
             "--yes",
             "--name",
             env_name,
-            "--all",
         ]
-        subprocess.run(remove_cmd, check=False)
+        subprocess.run(remove_cmd, check=False, cwd=PROJECT_ROOT)
 
 
 def _run_eval_subprocess(env_name: str, config_path: Path) -> None:
@@ -186,6 +185,8 @@ def open_environment() -> None:
     )
 
     for task in datasets:
+        if task.task_id != "alzheimer-mouse":
+            continue
         run_config = _build_run_config(
             task=task,
             system_prompt_name=SYSTEM_PROMPT,
@@ -202,8 +203,11 @@ def open_environment() -> None:
 
         with temporary_mamba_environment() as env_name:
             print(f"Running task '{task.task_id}' in environment '{env_name}'.")
-            _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
-            print(f"Completed task '{task.task_id}'.")
+            try:
+                _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
+                print(f"Completed task '{task.task_id}'.")
+            except subprocess.CalledProcessError as e:
+                print(e)
 
 
 if __name__ == "__main__":
