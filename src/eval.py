@@ -154,7 +154,6 @@ def isolated_run_environment(run_dir_path: Path, inputs_root: Path) -> Iterator[
         yield copied_inputs_root
     finally:
         os.chdir(previous_cwd)
-    logging.info(f"Finished copying inputs to run directory: {copied_inputs_root}")
 
 
 def evaluate_task(run_config: RunConfig) -> RunConfig:
