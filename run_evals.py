@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import os
-import json
 import subprocess
-import tempfile
 import uuid
 from contextlib import contextmanager
-from dataclasses import asdict
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator, Sequence
 
 from src.dataset import DataSet
-from src.logs import RunConfig
+from src.logs import RunConfig, configure_logging
 from src.system_prompts import prompts
 
 
@@ -33,31 +31,6 @@ TOOL_NAMES: Sequence[str] = (
     "run_terminal_command",
 )
 BASE_ENV = "base"
-
-
-def _generate_run_hash(_: str, length: int = 7) -> str:
-    """Generate a short, random identifier for a run configuration.
-
-    Args:
-        _ (str): Unused input retained for compatibility.
-        length (int): Desired number of characters in the identifier.
-
-    Returns:
-        str: Numeric run hash of the requested length.
-    """
-
-    return str(uuid.uuid4().int % (10**length)).zfill(length)
-
-
-def _resolve_mamba_executable() -> str:
-    """Resolve the executable used to invoke mamba.
-
-    Returns:
-        str: Executable name or absolute path used for ``mamba``.
-    """
-
-    # TODO: Update this if ``mamba`` is not on PATH or a different executable should be used.
-    return "mamba"
 
 
 def _build_run_config(
@@ -117,14 +90,13 @@ def _build_run_config(
 def temporary_mamba_environment() -> Iterator[str]:
     """Provision a throwaway mamba environment and clean it up afterwards.
 
-    Args:
-        base_env (str): Existing environment to clone. Defaults to ``"base"``.
-
     Yields:
         Iterator[str]: The name of the newly created environment.
     """
 
-    executable = "mamba"
+    # I wrapped this in a subprocess to avoid propaganting logs to my console
+    # There is a lot of spam that made babysitting the agents difficult
+    executable = 'mamba'
     env_name = f"bioagent-eval-{uuid.uuid4().hex}"
 
     create_cmd = [
@@ -137,7 +109,15 @@ def temporary_mamba_environment() -> Iterator[str]:
         "--file",
         "eval-environment.yml",
     ]
-    subprocess.run(create_cmd, check=True, cwd=PROJECT_ROOT)
+    logging.info("Provisioning evaluation environment %s", env_name)
+    subprocess.run(
+        create_cmd,
+        check=True,
+        cwd=PROJECT_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
 
     try:
         yield env_name
@@ -150,8 +130,15 @@ def temporary_mamba_environment() -> Iterator[str]:
             "--name",
             env_name,
         ]
-        subprocess.run(remove_cmd, check=False, cwd=PROJECT_ROOT)
-
+        logging.info("Removing evaluation environment %s", env_name)
+        result = subprocess.run(
+            remove_cmd,
+            check=False,
+            cwd=PROJECT_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
 
 def _run_eval_subprocess(env_name: str, config_path: Path) -> None:
     """Run ``src.eval`` in a subprocess inside the provided environment.
@@ -161,7 +148,7 @@ def _run_eval_subprocess(env_name: str, config_path: Path) -> None:
         config_path (Path): Path to the serialised run configuration.
     """
 
-    executable = _resolve_mamba_executable()
+    executable = "mamba"
     cmd = [
         executable,
         "run",
@@ -179,6 +166,8 @@ def _run_eval_subprocess(env_name: str, config_path: Path) -> None:
 
 def open_environment() -> None:
     """Models have no tools"""
+
+    configure_logging()
     datasets = DataSet.load_all(
         metadata_path=METADATA_PATH,
         data_root=DATA_ROOT,

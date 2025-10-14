@@ -1,4 +1,26 @@
 import json
+import logging
+
+def configure_logging(level: int = logging.INFO) -> None:
+    """Set up console logging for runners and agents.
+
+    Args:
+        level (int): Logging level to apply to the root logger.
+
+    Returns:
+        None: This function configures global logging handlers.
+    """
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+
+    if not root_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
+        root_logger.addHandler(handler)
+
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime
 from pathlib import Path

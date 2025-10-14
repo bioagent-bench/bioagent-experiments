@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import shutil
 import time
@@ -24,10 +25,12 @@ from .judge_agent import (
     parse_agent_outputs,
     parse_agent_results,
 )
-from .logs import RunConfig
+from .logs import RunConfig, configure_logging
 from .models import create_azure_model, load_model
 from .tools import run_terminal_command
 
+
+configure_logging()
 
 SmolagentsInstrumentor().instrument()
 register(project_name="bioagent-experiments")
@@ -142,6 +145,7 @@ def isolated_run_environment(run_dir_path: Path, inputs_root: Path) -> Iterator[
     """
 
     copied_inputs_root = run_dir_path / "inputs"
+    logging.info(f"Copying inputs to run directory: {copied_inputs_root}")
     copy_inputs_to_run_directory(inputs_root, copied_inputs_root)
 
     previous_cwd = Path.cwd()
@@ -150,6 +154,7 @@ def isolated_run_environment(run_dir_path: Path, inputs_root: Path) -> Iterator[
         yield copied_inputs_root
     finally:
         os.chdir(previous_cwd)
+    logging.info(f"Finished copying inputs to run directory: {copied_inputs_root}")
 
 
 def evaluate_task(run_config: RunConfig) -> RunConfig:
@@ -215,8 +220,14 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
 
             run_start_time = time.perf_counter()
             try:
+                logging.info(
+                    f"Running agent with task prompt: {run_config.task_prompt 
+                    + f'\n\nThe input data is: {input_data}'}"
+                )
                 results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
+                logging.info(f"Agent finished running with results: {results}")
             except AgentError as error:
+                logging.error(f"Agent finished running with error: {error}")
                 elapsed_minutes = (time.perf_counter() - run_start_time) / 60
                 run_config.duration = elapsed_minutes
                 run_config.steps = len(agent.memory.steps)
@@ -251,6 +262,8 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
         run_config.partial_steps = None
         agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "results")
 
+
+        logging.info(f"Running judge LLM to evaluate the results")
         if run_config.task_id == "giab":
             agent_results = eval_giab_metrics(
                 run_config.run_dir_path / "results",
@@ -281,9 +294,11 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
             messages=[{"role": "user", "content": judge_prompt}],
         ).choices[0].message.content
         final_result = EvaluationResults(**json.loads(response))
+        logging.info(f"Judge LLM finished running with results: {final_result}")
 
         run_config.eval_results = final_result
         run_config.save_run_metadata()
+        logging.info(f"Run configuration saved with results: {run_config.eval_results}")
 
     return run_config
 
