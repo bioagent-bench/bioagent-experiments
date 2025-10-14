@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import shutil
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -11,6 +12,8 @@ from typing import Any, Iterator
 from openinference.instrumentation.smolagents import SmolagentsInstrumentor
 from phoenix.otel import register
 from smolagents import CodeAgent
+from smolagents.memory import ActionStep, PlanningStep
+from smolagents.utils import AgentError
 from opentelemetry import trace
 
 from .judge_agent import (
@@ -209,13 +212,43 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
                 return_full_result=True,
             )
             agent.prompt_templates["system_prompt"] = run_config.system_prompt
-            results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
+
+            run_start_time = time.perf_counter()
+            try:
+                results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
+            except AgentError as error:
+                elapsed_minutes = (time.perf_counter() - run_start_time) / 60
+                run_config.duration = elapsed_minutes
+                run_config.steps = len(agent.memory.steps)
+                partial_steps = agent.memory.get_full_steps()
+                run_config.partial_steps = partial_steps
+                token_steps = [
+                    step
+                    for step in agent.memory.steps
+                    if isinstance(step, (ActionStep, PlanningStep)) and step.token_usage is not None
+                ]
+                total_input_tokens = sum(step.token_usage.input_tokens for step in token_steps)
+                total_output_tokens = sum(step.token_usage.output_tokens for step in token_steps)
+                run_config.input_tokens = total_input_tokens
+                run_config.output_tokens = total_output_tokens
+                run_config.error_type = type(error).__name__
+                run_config.error_message = str(error)
+                run_config.eval_results = None
+                run_config.save_run_metadata()
+                return run_config
 
         # collect stuff from the results
-        run_config.input_tokens = results.token_usage.input_tokens
-        run_config.output_tokens = results.token_usage.output_tokens
+        if results.token_usage is not None:
+            run_config.input_tokens = results.token_usage.input_tokens
+            run_config.output_tokens = results.token_usage.output_tokens
+        else:
+            run_config.input_tokens = 0.0
+            run_config.output_tokens = 0.0
         run_config.duration = results.timing.duration / 60
         run_config.steps = len(results.steps)
+        run_config.error_type = None
+        run_config.error_message = None
+        run_config.partial_steps = None
         agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "results")
 
         if run_config.task_id == "giab":

@@ -36,6 +36,9 @@ class RunConfig:
     steps: int = 0
     input_tokens: float = 0.0
     output_tokens: float = 0.0
+    error_type: str | None = None
+    error_message: str | None = None
+    partial_steps: list[dict[str, Any]] | None = None
     run_dir_path: Optional[Path] = None
     data_path: Optional[Path] = None
     tools: List[Any] = field(default_factory=list, repr=False)
@@ -68,6 +71,9 @@ class RunConfig:
             "steps": self.steps,
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "error_type": self.error_type,
+            "error_message": self.error_message,
+            "partial_steps": self.partial_steps,
             "eval_results": _serialize_eval_results(self.eval_results),
             "run_dir_path": str(self.run_dir_path),
             "data_path": str(self.data_path),
@@ -114,6 +120,9 @@ class RunConfig:
             steps=payload.get("steps", 0),
             input_tokens=payload.get("input_tokens", 0.0),
             output_tokens=payload.get("output_tokens", 0.0),
+            error_type=payload.get("error_type"),
+            error_message=payload.get("error_message"),
+            partial_steps=payload.get("partial_steps"),
             run_dir_path=Path(run_dir_path_raw),
             data_path=Path(data_path_raw),
         )
