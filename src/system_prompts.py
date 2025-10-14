@@ -74,6 +74,7 @@ prompts = {
     "except subprocess.CalledProcessError as e:"
     "    print(f'Error: {e.stderr}')"
     "</example>"
+    "When working with file paths, always use absolute paths rather than relative."
 
     # "# Task Management"
     # "On the first user prompts, create a detailed execution plan based on data availability,"
