@@ -185,7 +185,7 @@ def open_environment() -> None:
     )
 
     for task in datasets:
-        if task.task_id != "alzheimer-mouse":
+        if task.task_id == "alzheimer-mouse":
             continue
         run_config = _build_run_config(
             task=task,
