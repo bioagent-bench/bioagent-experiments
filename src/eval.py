@@ -259,14 +259,16 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
         run_config.error_type = None
         run_config.error_message = None
         run_config.partial_steps = None
-        agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "results")
+
+        # this parses what the agent has generated
+        agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "outputs")
 
 
         logging.info(f"Running judge LLM to evaluate the results")
         if run_config.task_id == "giab":
             agent_results = eval_giab_metrics(
                 run_config.run_dir_path / "results",
-                run_config.run_dir_path / "results",
+                run_config.data_path / "results",
                 inputs_root / "data" / "Agilent_v7.chr.bed",
                 inputs_root / "reference" / "Homo_sapiens_assembly38.fasta",
             )

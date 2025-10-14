@@ -102,5 +102,9 @@ prompts = {
     "# Finalizing the pipeline"
     "Output the final results in the same format as was asked by the user in the provided example"
     "Output the final results into a results/ directory"
+    "In the end you have to return a final answer using the `final_answer` tool."
+    "<example>"
+    "final_answer(aribtrary result)"
+    "</example>"
     )
 }
