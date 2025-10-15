@@ -87,8 +87,10 @@ def _build_run_config(
 
 
 @contextmanager
-def temporary_mamba_environment() -> Iterator[str]:
+def temporary_mamba_environment(env_file: Path) -> Iterator[str]:
     """Provision a throwaway mamba environment and clean it up afterwards.
+    Args:
+        env_file (Path): Path to the environment file to use.
 
     Yields:
         Iterator[str]: The name of the newly created environment.
@@ -107,7 +109,7 @@ def temporary_mamba_environment() -> Iterator[str]:
         "--name",
         env_name,
         "--file",
-        "eval-environment.yml",
+        str(env_file),
     ]
     logging.info("Provisioning evaluation environment %s", env_name)
     subprocess.run(
@@ -188,7 +190,7 @@ def open_environment() -> None:
         run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
         run_config.save_run_metadata()
 
-        with temporary_mamba_environment() as env_name:
+        with temporary_mamba_environment(env_file=Path("envs/open-environment.yml")) as env_name:
             print(f"Running task '{task.task_id}' in environment '{env_name}'.")
             try:
                 _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
