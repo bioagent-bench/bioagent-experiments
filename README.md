@@ -23,8 +23,13 @@ uv sync
 export RUN_LOGS=/home/user/run_logs/
 ```
 
+3. Install bioinformatics-mcp package
+```bash
+uv pip install -e /home/dionizije/bioinformatics-mcp 
+```
 
-3. Run telemetry (Optional)
+
+4. Run telemetry (Optional)
 ```bash
 python -m phoenix.server.main serve
 ```

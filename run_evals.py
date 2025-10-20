@@ -27,9 +27,6 @@ MAX_STEPS = 20
 PLANNING_INTERVAL = 1
 EXPERIMENT_NAME = "open-environment"
 MODEL_NAME = "azure"
-TOOL_NAMES: Sequence[str] = (
-    "run_terminal_command",
-)
 BASE_ENV = "base"
 
 
@@ -184,7 +181,7 @@ def open_environment() -> None:
             planning_interval=PLANNING_INTERVAL,
             experiment_name=EXPERIMENT_NAME,
             model=MODEL_NAME,
-            tool_names=TOOL_NAMES,
+            tool_names=('run_terminal_command'),
         )
 
         run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
@@ -199,5 +196,40 @@ def open_environment() -> None:
                 print(e)
 
 
+def minimal_tool_environmet() -> None:
+    """Models have minimal tools"""
+    from src.tools import AVAILABLE_TOOLS_LIST
+    from src.tools import TASK_TOOL_MAPPING
+
+
+    configure_logging()
+    datasets = DataSet.load_all(
+        metadata_path=METADATA_PATH,
+        data_root=DATA_ROOT,
+    )
+    for task in datasets:
+        # define the toolset for each task
+
+        task_tools = TASK_TOOL_MAPPING[task.task_id]
+        task_specific_tools = Sequence([tool.__name__ for tool in task_tools])
+        task_specific_tools.extend('run_terminal_command')
+
+        print(task_specific_tools)
+        print(error)
+
+
+        run_config = _build_run_config(
+            task=task,
+            system_prompt_name=SYSTEM_PROMPT,
+            run_logs=RUN_LOGS,
+            max_steps=MAX_STEPS,
+            planning_interval=PLANNING_INTERVAL,
+            experiment_name=EXPERIMENT_NAME,
+            model=MODEL_NAME,
+            tool_names=,
+        )
+
+
 if __name__ == "__main__":
-    open_environment()
+    # open_environment()
+    minimal_tool_environmet()
