@@ -13,21 +13,13 @@ from typing import Iterator, Sequence
 
 from src.dataset import DataSet
 from src.logs import RunConfig, configure_logging
+from src.tools import REGISTRY
 from src.system_prompts import prompts
-
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 RUN_LOGS = Path(os.getenv("RUN_LOGS"))
-
-
 METADATA_PATH = Path("/home/dionizije/bioagent-bench/src/task_metadata.json")
 DATA_ROOT = Path("/home/dionizije/bioagent-data")
-SYSTEM_PROMPT = "v1"
-MAX_STEPS = 20
-PLANNING_INTERVAL = 1
-EXPERIMENT_NAME = "open-environment"
-MODEL_NAME = "azure"
-BASE_ENV = "base"
 
 
 def _build_run_config(
@@ -166,6 +158,12 @@ def _run_eval_subprocess(env_name: str, config_path: Path) -> None:
 def open_environment() -> None:
     """Models have no tools"""
 
+    SYSTEM_PROMPT = "v1"
+    MAX_STEPS = 20
+    PLANNING_INTERVAL = 1
+    EXPERIMENT_NAME = "open-environment"
+    MODEL_NAME = "azure"
+
     configure_logging()
     datasets = DataSet.load_all(
         metadata_path=METADATA_PATH,
@@ -181,7 +179,7 @@ def open_environment() -> None:
             planning_interval=PLANNING_INTERVAL,
             experiment_name=EXPERIMENT_NAME,
             model=MODEL_NAME,
-            tool_names=('run_terminal_command'),
+            tool_names=("run_terminal_command",),
         )
 
         run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
@@ -198,8 +196,12 @@ def open_environment() -> None:
 
 def minimal_tool_environmet() -> None:
     """Models have minimal tools"""
-    from src.tools import AVAILABLE_TOOLS_LIST
-    from src.tools import TASK_TOOL_MAPPING
+
+    SYSTEM_PROMPT = "v1"
+    MAX_STEPS = 20
+    PLANNING_INTERVAL = 1
+    EXPERIMENT_NAME = "minimal-tool-environment"
+    MODEL_NAME = "azure"
 
 
     configure_logging()
@@ -208,15 +210,7 @@ def minimal_tool_environmet() -> None:
         data_root=DATA_ROOT,
     )
     for task in datasets:
-        # define the toolset for each task
-
-        task_tools = TASK_TOOL_MAPPING[task.task_id]
-        task_specific_tools = Sequence([tool.__name__ for tool in task_tools])
-        task_specific_tools.extend('run_terminal_command')
-
-        print(task_specific_tools)
-        print(error)
-
+        tool_names = REGISTRY.tool_names_for_task(task.task_id)
 
         run_config = _build_run_config(
             task=task,
@@ -226,8 +220,19 @@ def minimal_tool_environmet() -> None:
             planning_interval=PLANNING_INTERVAL,
             experiment_name=EXPERIMENT_NAME,
             model=MODEL_NAME,
-            tool_names=,
+            tool_names=tool_names,
         )
+
+        run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
+        run_config.save_run_metadata()
+
+        with temporary_mamba_environment(env_file=Path("envs/tools-environment.yml")) as env_name:
+            print(f"Running task '{task.task_id}' in environment '{env_name}'.")
+            try:
+                _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
+                print(f"Completed task '{task.task_id}'.")
+            except subprocess.CalledProcessError as e:
+                print(e)
 
 
 if __name__ == "__main__":

@@ -27,18 +27,13 @@ from .judge_agent import (
 )
 from .logs import RunConfig, configure_logging
 from .models import create_azure_model, load_model
-from .tools import run_terminal_command
+from .tools import REGISTRY
 
 
 configure_logging()
 
 SmolagentsInstrumentor().instrument()
 register(project_name="bioagent-experiments")
-
-TOOLS_REGISTRY: dict[str, Any] = {
-    "run_terminal_command": run_terminal_command,
-}
-
 
 def load_run_config(config_path: Path) -> RunConfig:
     """Load a ``RunConfig`` instance from a metadata JSON file.
@@ -52,15 +47,10 @@ def load_run_config(config_path: Path) -> RunConfig:
 
     run_config = RunConfig.load_run_metadata(config_path)
 
-    tools: list[Any] = []
-    for tool_name in run_config.tool_names:
-        tool = TOOLS_REGISTRY.get(tool_name)
-        if tool is None:
-            raise ValueError(f"Unknown tool requested in configuration: {tool_name}")
-        tools.append(tool)
+    resolved_tools = REGISTRY.resolve_tools(run_config.tool_names)
 
-    run_config.tools = tools
-    run_config.num_tools = len(tools)
+    run_config.tools = resolved_tools
+    run_config.num_tools = len(resolved_tools)
 
     return run_config
 
