@@ -1,86 +1,90 @@
+import importlib.util
+import random
+import warnings
 from typing import Any, Callable, Collection, Sequence
 
 from smolagents import tool
 
-from bio_mcp.tools.snake.variant_processing.snpsift_casecontrol import (
-    snpsift_casecontrol,
-)
-from bio_mcp.tools.snake.variant_processing.snpsift_filter import snpsift_filter
-from bio_mcp.tools.snake.variant_processing.snpeff_download import snpeff_download
-from bio_mcp.tools.snake.variant_processing.snpeff_annotate import snpeff_annotate
+BIO_MCP_AVAILABLE = importlib.util.find_spec("bio_mcp") is not None
 
-from bio_mcp.tools.snake.preprocessing.fastqc import fastqc
-from bio_mcp.tools.snake.preprocessing.trimmomatic import trimmomatic
-from bio_mcp.tools.snake.reporting.multiqc import multiqc
-from bio_mcp.tools.snake.alignment.star_index import star_index
-from bio_mcp.tools.snake.alignment.star_align import star_align
-from bio_mcp.tools.snake.reporting.deseq2_deseqdataset import deseq2_deseqdataset
-from bio_mcp.tools.snake.reporting.deseq2_wald import deseq2_wald
+if BIO_MCP_AVAILABLE:
+    from bio_mcp.tools.snake.variant_processing.snpsift_casecontrol import (
+        snpsift_casecontrol,
+    )
+    from bio_mcp.tools.snake.variant_processing.snpsift_filter import snpsift_filter
+    from bio_mcp.tools.snake.variant_processing.snpeff_download import snpeff_download
+    from bio_mcp.tools.snake.variant_processing.snpeff_annotate import snpeff_annotate
 
-from bio_mcp.tools.snake.preprocessing.fastp import fastp
-from bio_mcp.tools.snake.reporting.quast import quast
-from bio_mcp.tools.snake.alignment.bwa_mem2_index import bwa_mem2_index
-from bio_mcp.tools.snake.alignment.bwa_mem2_mem import bwa_mem2_mem
-from bio_mcp.tools.snake.bam_processing.samtools_faidx import samtools_faidx
-from bio_mcp.tools.snake.bam_processing.samtools_sort import samtools_sort
-from bio_mcp.tools.snake.bam_processing.samtools_fixmate import samtools_fixmate
-from bio_mcp.tools.snake.bam_processing.samtools_markdup import samtools_markdup
-from bio_mcp.tools.snake.bam_processing.samtools_view import samtools_view
-from bio_mcp.tools.snake.bam_processing.samtools_index import samtools_index
-from bio_mcp.tools.snake.variant_calling.freebayes import freebayes
-from bio_mcp.tools.snake.variant_processing.bgzip import bgzip
-from bio_mcp.tools.snake.variant_processing.tabix_index import tabix_index
-from bio_mcp.tools.snake.variant_processing.bcftools_filter import bcftools_filter
-from bio_mcp.tools.snake.variant_processing.bcftools_view import bcftools_view
-from bio_mcp.tools.snake.variant_processing.bcftools_index import bcftools_index
-from bio_mcp.tools.snake.variant_processing.vembrane_filter import vembrane_filter
-from bio_mcp.tools.snake.reporting.compleasm_run import compleasm_run
-from bio_mcp.tools.snake.reporting.compleasm_download import compleasm_download
-from bio_mcp.tools.snake.assembly.metaspades import metaspades
+    from bio_mcp.tools.snake.preprocessing.fastqc import fastqc
+    from bio_mcp.tools.snake.preprocessing.trimmomatic import trimmomatic
+    from bio_mcp.tools.snake.reporting.multiqc import multiqc
+    from bio_mcp.tools.snake.alignment.star_index import star_index
+    from bio_mcp.tools.snake.alignment.star_align import star_align
+    from bio_mcp.tools.snake.reporting.deseq2_deseqdataset import deseq2_deseqdataset
+    from bio_mcp.tools.snake.reporting.deseq2_wald import deseq2_wald
 
-from bio_mcp.tools.snake.variant_processing.picard_createsequencedictionary import (
-    picard_createsequencedictionary,
-)
-from bio_mcp.tools.snake.variant_processing.picard_addorreplacereadgroups import (
-    picard_addorreplacereadgroups,
-)
-from bio_mcp.tools.snake.bam_processing.sambamba_markdup import sambamba_markdup
-from bio_mcp.tools.snake.variant_processing.gatk_baserecalibrator import (
-    gatk_baserecalibrator,
-)
-from bio_mcp.tools.snake.variant_processing.gatk_applybqsr import gatk_applybqsr
-from bio_mcp.tools.snake.variant_calling.gatk_haplotypecaller import (
-    gatk_haplotypecaller,
-)
-from bio_mcp.tools.snake.variant_processing.bcftools_stats import bcftools_stats
-from bio_mcp.tools.snake.reporting.mosdepth import mosdepth
-from bio_mcp.tools.snake.reporting.picard_collecthsmetrics import (
-    picard_collecthsmetrics,
-)
-from bio_mcp.tools.snake.kraken2.kraken2_download_library import (
-    kraken2_download_library,
-)
-from bio_mcp.tools.snake.kraken2.kraken2_download_taxonomy import (
-    kraken2_download_taxonomy,
-)
-from bio_mcp.tools.snake.kraken2.kraken2_build import kraken2_build
-from bio_mcp.tools.snake.kraken2.kraken2_classify import kraken2_classify
-from bio_mcp.tools.snake.metagenomics.kraken_biom import kraken_biom
+    from bio_mcp.tools.snake.preprocessing.fastp import fastp
+    from bio_mcp.tools.snake.reporting.quast import quast
+    from bio_mcp.tools.snake.alignment.bwa_mem2_index import bwa_mem2_index
+    from bio_mcp.tools.snake.alignment.bwa_mem2_mem import bwa_mem2_mem
+    from bio_mcp.tools.snake.bam_processing.samtools_faidx import samtools_faidx
+    from bio_mcp.tools.snake.bam_processing.samtools_sort import samtools_sort
+    from bio_mcp.tools.snake.bam_processing.samtools_fixmate import samtools_fixmate
+    from bio_mcp.tools.snake.bam_processing.samtools_markdup import samtools_markdup
+    from bio_mcp.tools.snake.bam_processing.samtools_view import samtools_view
+    from bio_mcp.tools.snake.bam_processing.samtools_index import samtools_index
+    from bio_mcp.tools.snake.variant_calling.freebayes import freebayes
+    from bio_mcp.tools.snake.variant_processing.bgzip import bgzip
+    from bio_mcp.tools.snake.variant_processing.tabix_index import tabix_index
+    from bio_mcp.tools.snake.variant_processing.bcftools_filter import bcftools_filter
+    from bio_mcp.tools.snake.variant_processing.bcftools_view import bcftools_view
+    from bio_mcp.tools.snake.variant_processing.bcftools_index import bcftools_index
+    from bio_mcp.tools.snake.variant_processing.vembrane_filter import vembrane_filter
+    from bio_mcp.tools.snake.reporting.compleasm_run import compleasm_run
+    from bio_mcp.tools.snake.reporting.compleasm_download import compleasm_download
+    from bio_mcp.tools.snake.assembly.metaspades import metaspades
 
-from bio_mcp.tools.snake.quantification.salmon_index import salmon_index
-from bio_mcp.tools.snake.quantification.salmon_quant import salmon_quant
+    from bio_mcp.tools.snake.variant_processing.picard_createsequencedictionary import (
+        picard_createsequencedictionary,
+    )
+    from bio_mcp.tools.snake.variant_processing.picard_addorreplacereadgroups import (
+        picard_addorreplacereadgroups,
+    )
+    from bio_mcp.tools.snake.bam_processing.sambamba_markdup import sambamba_markdup
+    from bio_mcp.tools.snake.variant_processing.gatk_baserecalibrator import (
+        gatk_baserecalibrator,
+    )
+    from bio_mcp.tools.snake.variant_processing.gatk_applybqsr import gatk_applybqsr
+    from bio_mcp.tools.snake.variant_calling.gatk_haplotypecaller import (
+        gatk_haplotypecaller,
+    )
+    from bio_mcp.tools.snake.variant_processing.bcftools_stats import bcftools_stats
+    from bio_mcp.tools.snake.reporting.mosdepth import mosdepth
+    from bio_mcp.tools.snake.reporting.picard_collecthsmetrics import (
+        picard_collecthsmetrics,
+    )
+    from bio_mcp.tools.snake.kraken2.kraken2_download_library import (
+        kraken2_download_library,
+    )
+    from bio_mcp.tools.snake.kraken2.kraken2_download_taxonomy import (
+        kraken2_download_taxonomy,
+    )
+    from bio_mcp.tools.snake.kraken2.kraken2_build import kraken2_build
+    from bio_mcp.tools.snake.kraken2.kraken2_classify import kraken2_classify
+    from bio_mcp.tools.snake.metagenomics.kraken_biom import kraken_biom
 
-from bio_mcp.tools.snake.preprocessing.fastp import fastp
-from bio_mcp.tools.snake.alignment.minimap2_index import minimap2_index
-from bio_mcp.tools.snake.alignment.minimap2_align import minimap2_align
-from bio_mcp.tools.snake.bam_processing.samtools_fastq_separate import (
-    samtools_fastq_separate,
-)
-from bio_mcp.tools.snake.assembly.megahit import megahit
-from bio_mcp.tools.snake.extra.kaiju_classify import kaiju_classify
-from bio_mcp.tools.snake.extra.kaiju2krona import kaiju2krona
+    from bio_mcp.tools.snake.quantification.salmon_index import salmon_index
+    from bio_mcp.tools.snake.quantification.salmon_quant import salmon_quant
 
-import warnings
+    from bio_mcp.tools.snake.alignment.minimap2_index import minimap2_index
+    from bio_mcp.tools.snake.alignment.minimap2_align import minimap2_align
+    from bio_mcp.tools.snake.bam_processing.samtools_fastq_separate import (
+        samtools_fastq_separate,
+    )
+    from bio_mcp.tools.snake.assembly.megahit import megahit
+    from bio_mcp.tools.snake.extra.kaiju_classify import kaiju_classify
+    from bio_mcp.tools.snake.extra.kaiju2krona import kaiju2krona
+# this filters warnings which says there are multiple decorators
 warnings.filterwarnings(
     "ignore",
     category=UserWarning,
@@ -125,8 +129,12 @@ class ToolRegistry:
 
         if default_tools is not None:
             for tool_spec in default_tools:
-                tool_fn = self._resolve_tool_spec(tool_spec)
-                name = self.register_tool(tool_fn)
+                if isinstance(tool_spec, str):
+                    tool_fn = self._resolve_tool_spec(tool_spec)
+                    name = self.register_tool(tool_fn, name=tool_spec)
+                else:
+                    tool_fn = tool_spec
+                    name = self.register_tool(tool_fn)
                 self._default_tool_names.append(name)
 
     def _resolve_tool_spec(self, tool_spec: ToolSpec) -> ToolFn:
@@ -142,7 +150,12 @@ class ToolRegistry:
         return tool_spec
 
     def register_tool(self, tool_fn: ToolFn, *, name: str | None = None) -> str:
-        key = name
+        if name is None:
+            key = getattr(tool_fn, "__name__", None)
+            if key is None:
+                raise ValueError("Tool must have a name parameter or __name__ attribute.")
+        else:
+            key = name
         self._tools_by_name[key] = tool_fn
         return key
 
@@ -189,6 +202,40 @@ class ToolRegistry:
                 raise KeyError(f"Unknown tool requested: {name}")
             tools.append(tool)
         return tools
+
+    def all_tool_names(self) -> list[str]:
+        """Return every tool registered with the registry.
+
+        Returns:
+            list[str]: Collection of all registered tool identifiers.
+        """
+
+        return list(self._tools_by_name.keys())
+
+    def sample_additional_tool_names(
+        self,
+        *,
+        exclude: Collection[str],
+        sample_size: int,
+    ) -> list[str]:
+        """Sample random tools that are not part of a provided exclusion list.
+
+        Args:
+            exclude (Collection[str]): Tool names to skip during sampling.
+            sample_size (int): Number of tool names to sample.
+
+        Returns:
+            list[str]: Random subset of available tool names.
+        """
+
+        excluded_names = set(exclude)
+        available_tools = [
+            name for name in self.all_tool_names() if name not in excluded_names
+        ]
+        if not available_tools:
+            return []
+        count = min(sample_size, len(available_tools))
+        return random.sample(available_tools, k=count)
 
 
 tool_snpsift_casecontrol = tool(snpsift_casecontrol)
@@ -246,7 +293,7 @@ tool_kaiju_classify = tool(kaiju_classify)
 tool_kaiju2krona = tool(kaiju2krona)
 
 
-REGISTRY = ToolRegistry(default_tools=[run_terminal_command])
+REGISTRY = ToolRegistry(default_tools=['run_terminal_command'])
 
 for name, obj in list(globals().items()):
     if name.startswith("tool_"):

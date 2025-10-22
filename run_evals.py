@@ -158,7 +158,6 @@ def _run_eval_subprocess(env_name: str, config_path: Path) -> None:
 def open_environment() -> None:
     """Models have no tools"""
 
-    SYSTEM_PROMPT = "v1"
     MAX_STEPS = 20
     PLANNING_INTERVAL = 1
     EXPERIMENT_NAME = "open-environment"
@@ -173,7 +172,7 @@ def open_environment() -> None:
     for task in datasets:
         run_config = _build_run_config(
             task=task,
-            system_prompt_name=SYSTEM_PROMPT,
+            system_prompt_name='v1',
             run_logs=RUN_LOGS,
             max_steps=MAX_STEPS,
             planning_interval=PLANNING_INTERVAL,
@@ -197,7 +196,6 @@ def open_environment() -> None:
 def minimal_tool_environmet() -> None:
     """Models have minimal tools"""
 
-    SYSTEM_PROMPT = "v1"
     MAX_STEPS = 20
     PLANNING_INTERVAL = 1
     EXPERIMENT_NAME = "minimal-tool-environment"
@@ -210,11 +208,106 @@ def minimal_tool_environmet() -> None:
         data_root=DATA_ROOT,
     )
     for task in datasets:
-        tool_names = REGISTRY.tool_names_for_task(task.task_id)
+        if task.task_id != "transcript-quant":
+            continue
 
+        tool_names = REGISTRY.tool_names_for_task(task.task_id)
         run_config = _build_run_config(
             task=task,
-            system_prompt_name=SYSTEM_PROMPT,
+            system_prompt_name='v2',
+            run_logs=RUN_LOGS,
+            max_steps=MAX_STEPS,
+            planning_interval=PLANNING_INTERVAL,
+            experiment_name=EXPERIMENT_NAME,
+            model=MODEL_NAME,
+            tool_names=tool_names,
+        )
+
+        run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
+        run_config.save_run_metadata()
+
+        with temporary_mamba_environment(env_file=Path("envs/tools-environment.yml")) as env_name:
+            print(f"Running task '{task.task_id}' in environment '{env_name}'.")
+            try:
+                _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
+                print(f"Completed task '{task.task_id}'.")
+            except subprocess.CalledProcessError as e:
+                print(e)
+
+
+def expanded_tool_environmet() -> None:
+    """Models are expanded with random unnecessary tools"""
+
+    MAX_STEPS = 20
+    PLANNING_INTERVAL = 1
+    EXPERIMENT_NAME = "expanded-tool-environment"
+    MODEL_NAME = "azure"
+
+    configure_logging()
+    datasets = DataSet.load_all(
+        metadata_path=METADATA_PATH,
+        data_root=DATA_ROOT,
+    )
+    for task in datasets:
+        if task.task_id != "transcript-quant":
+            continue
+
+        base_tool_names = REGISTRY.tool_names_for_task(task.task_id)
+        random_tool_names = REGISTRY.sample_additional_tool_names(
+            exclude=base_tool_names,
+            sample_size=10,
+        )
+        tool_names = REGISTRY.tool_names_for_task(
+            task.task_id,
+            extra_tool_names=random_tool_names,
+        )
+        run_config = _build_run_config(
+            task=task,
+            system_prompt_name='v2',
+            run_logs=RUN_LOGS,
+            max_steps=MAX_STEPS,
+            planning_interval=PLANNING_INTERVAL,
+            experiment_name=EXPERIMENT_NAME,
+            model=MODEL_NAME,
+            tool_names=tool_names,
+        )
+
+        run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
+        run_config.save_run_metadata()
+
+        with temporary_mamba_environment(env_file=Path("envs/tools-environment.yml")) as env_name:
+            print(f"Running task '{task.task_id}' in environment '{env_name}'.")
+            try:
+                _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
+                print(f"Completed task '{task.task_id}'.")
+            except subprocess.CalledProcessError as e:
+                print(e)
+
+
+def all_tools_environment() -> None:
+    """Models have full tools"""
+
+    MAX_STEPS = 20
+    PLANNING_INTERVAL = 1
+    EXPERIMENT_NAME = "all-tool-environment"
+    MODEL_NAME = "azure"
+
+    configure_logging()
+    datasets = DataSet.load_all(
+        metadata_path=METADATA_PATH,
+        data_root=DATA_ROOT,
+    )
+    for task in datasets:
+        if task.task_id != "transcript-quant":
+            continue
+
+        tool_names = REGISTRY.all_tool_names()
+        print('All tools environment')
+        print(tool_names)
+        print('-'*100)
+        run_config = _build_run_config(
+            task=task,
+            system_prompt_name='v2',
             run_logs=RUN_LOGS,
             max_steps=MAX_STEPS,
             planning_interval=PLANNING_INTERVAL,
@@ -236,5 +329,7 @@ def minimal_tool_environmet() -> None:
 
 
 if __name__ == "__main__":
-    # open_environment()
-    minimal_tool_environmet()
+    open_environment()
+    # minimal_tool_environmet()
+    # expanded_tool_environmet()
+    # all_tools_environment()
