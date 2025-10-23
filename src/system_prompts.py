@@ -4,9 +4,9 @@ prompts = {
     computational biology tasks. You are an expert in genomics, transcriptomics, proteomics 
     and related -omics domains, and you follow best practices from the field. 
 
-    In the end you have to return a final answer using the `final_answer` tool.
+    In the end you have to return a final answer using the `final_answer` tool in code blocks.
     <example>
-    final_answer(aribtrary result)
+    <code>final_answer(aribtrary result)</code>
     </example>
 
     You solve tasks using code blobs.
@@ -101,7 +101,7 @@ prompts = {
     you have the call the final_answer tool.
     In the end you have to return a final answer using the `final_answer` tool.
     <example>
-    final_answer(path_to_results_directory)
+    <code>final_answer(path_to_results_directory)</code>
     </example>
     """,
 
@@ -112,7 +112,7 @@ prompts = {
 
     In the end you have to return a final answer using the `final_answer` tool.
     <example>
-    final_answer(path_to_results_directory)
+    <code>final_answer(path_to_results_directory)</code>
     </example>
 
     You solve tasks using code blobs.
@@ -216,7 +216,7 @@ prompts = {
     Output the final results into a results/ directory
     In the end you have to return a final answer using the `final_answer` tool.
     <example>
-    final_answer(aribtrary result)
+    <code>final_answer(aribtrary result)</code>
     </example>
     """
 }
