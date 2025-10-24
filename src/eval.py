@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import shutil
@@ -19,6 +18,9 @@ from opentelemetry import trace
 
 from .judge_agent import (
     EvaluationResults,
+    EvaluationResultsGiab,
+    EvaluationResultsSchema,
+    EvaluationResultsGiabSchema,
     build_judge_prompt_csv,
     build_judge_prompt_giab,
     eval_giab_metrics,
@@ -208,6 +210,7 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
             agent.prompt_templates["system_prompt"] = run_config.system_prompt
 
             run_start_time = time.perf_counter()
+            caught_error: AgentError | None = None
             try:
                 logging.info(
                     f"Running agent with task prompt: {run_config.task_prompt 
@@ -216,6 +219,7 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
                 results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
                 logging.info(f"Agent finished running with results: {results}")
             except AgentError as error:
+                caught_error = error
                 logging.error(f"Agent finished running with error: {error}")
                 elapsed_minutes = (time.perf_counter() - run_start_time) / 60
                 run_config.duration = elapsed_minutes
@@ -252,9 +256,16 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
 
         # this parses what the agent has generated
         agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "outputs")
+        placeholder_log_path = Path.home() / "output.log"
+        with placeholder_log_path.open("a", encoding="utf-8") as placeholder_log:
+            placeholder_log.write(f"{agent_output_tree}\n")
+
+        print('error')
 
 
         logging.info(f"Running judge LLM to evaluate the results")
+        client = create_azure_model(framework="openai")
+
         if run_config.task_id == "giab":
             agent_results = eval_giab_metrics(
                 run_config.run_dir_path / "results",
@@ -268,6 +279,20 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
                 agent_output_tree,
                 agent_results,
             )
+            completion = client.beta.chat.completions.parse(
+                model="gpt-5",
+                messages=[{"role": "user", "content": judge_prompt}],
+                response_format=EvaluationResultsGiabSchema,
+            )
+            parsed_response = completion.choices[0].message.parsed
+            final_result = EvaluationResultsGiab(
+                steps_completed=parsed_response.steps_completed,
+                steps_to_completion=parsed_response.steps_to_completion,
+                final_results_reached=parsed_response.final_results_reached,
+                f1_score=parsed_response.f1_score,
+                notes=parsed_response.notes,
+            )
+
         else:
             agent_results = parse_agent_results(run_config.run_dir_path / "results")
             truth_results = parse_agent_results(run_config.data_path / "results")
@@ -278,15 +303,20 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
                 agent_results,
                 truth_results,
             )
+            completion = client.beta.chat.completions.parse(
+                model="gpt-5",
+                messages=[{"role": "user", "content": judge_prompt}],
+                response_format=EvaluationResultsSchema,
+            )
+            parsed_response = completion.choices[0].message.parsed
+            final_result = EvaluationResults(
+                steps_completed=parsed_response.steps_completed,
+                steps_to_completion=parsed_response.steps_to_completion,
+                final_result_reached=parsed_response.final_result_reached,
+                notes=parsed_response.notes,
+            )
 
-        client = create_azure_model(framework="openai")
-        response = client.chat.completions.create(
-            model="gpt-5",
-            messages=[{"role": "user", "content": judge_prompt}],
-        ).choices[0].message.content
-        final_result = EvaluationResults(**json.loads(response))
         logging.info(f"Judge LLM finished running with results: {final_result}")
-
         run_config.eval_results = final_result
         run_config.save_run_metadata()
         logging.info(f"Run configuration saved with results: {run_config.eval_results}")

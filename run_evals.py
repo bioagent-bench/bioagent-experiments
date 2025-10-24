@@ -329,7 +329,9 @@ def all_tools_environment() -> None:
 
 
 if __name__ == "__main__":
-    open_environment()
-    # minimal_tool_environmet()
-    # expanded_tool_environmet()
-    # all_tools_environment()
+    # for i in range(3):
+    #     open_environment()
+    #     minimal_tool_environmet()
+    #     expanded_tool_environmet()
+    #     all_tools_environment()
+    minimal_tool_environmet()

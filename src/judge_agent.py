@@ -4,18 +4,7 @@ import subprocess
 from tarfile import data_filter
 import tempfile
 from pathlib import Path
-
-@dataclass
-class EvaluationResults:
-    steps_to_completion: int
-    final_result_reached: bool
-
-import csv
-from dataclasses import dataclass
-import subprocess
-from tarfile import data_filter
-import tempfile
-from pathlib import Path
+from pydantic import BaseModel
 
 @dataclass
 class EvaluationResults:
@@ -32,19 +21,76 @@ class EvaluationResultsGiab:
     f1_score: int
     notes: str
 
+class EvaluationResultsSchema(BaseModel):
+    """Schema for evaluation results used with structured output API.
+    
+    Attributes:
+        steps_completed (int): Number of steps the agent completed.
+        steps_to_completion (int): Number of steps needed to reach completion.
+        final_result_reached (bool): Whether the agent reached the final result.
+        notes (str): Additional evaluation notes.
+    """
+    steps_completed: int
+    steps_to_completion: int
+    final_result_reached: bool
+    notes: str
+
+class EvaluationResultsGiabSchema(BaseModel):
+    """Schema for GIAB evaluation results used with structured output API.
+    
+    Attributes:
+        steps_completed (int): Number of steps the agent completed.
+        steps_to_completion (int): Number of steps needed to reach completion.
+        final_results_reached (bool): Whether the agent reached the final results.
+        f1_score (int): F1 score for the evaluation.
+        notes (str): Additional evaluation notes.
+    """
+    steps_completed: int
+    steps_to_completion: int
+    final_results_reached: bool
+    f1_score: int
+    notes: str
+
 
 
 def parse_agent_outputs(output_dir: Path) -> list[Path]:
-    """Return a list of files under the directory (recursively).
+    """Return files and immediate subdirectories under the directory.
+
+    For each top-level directory, returns:
+    - All files directly in that directory
+    - Names of subdirectories (but not their contents)
+
+    This reduces context spam by not listing all nested files.
 
     Args:
         output_dir (Path): Root directory to scan.
 
     Returns:
-        list[Path]: All file paths discovered under ``output_dir``.
+        list[Path]: File paths and subdirectory names relative to ``output_dir``.
     """
     root = Path(output_dir)
-    return [p for p in root.rglob("*") if p.is_file()]
+    results = []
+    
+    for item in root.rglob("*"):
+        if ".snakemake" in item.parts:
+            continue
+            
+        rel_path = item.relative_to(root)
+        
+        # Include files that are at most 2 levels deep (root/dir/file)
+        # But not files deeper than that (root/dir/subdir/file)
+        if item.is_file():
+            # Count path depth: if it's root/file or root/dir/file, include it
+            # Exclude root/dir/subdir/file and deeper
+            if len(rel_path.parts) <= 2:
+                results.append(rel_path)
+        # Include directories that are immediate children of top-level dirs
+        # (root/dir/subdir) but not deeper
+        elif item.is_dir():
+            if len(rel_path.parts) == 2:
+                results.append(rel_path)
+    
+    return results
 
 
 def parse_agent_results(results_dir):
@@ -159,23 +205,6 @@ def eval_giab_metrics(
                             f"Precision: {row.get('METRIC.Precision')}\n"
                             f"F1-Score: {row.get('METRIC.F1_Score')}"
                         )
-
-class EvaluationResultsGiab:
-    steps_to_completion: dict
-    final_results_reached: bool
-    f1_score: dict
-
-def parse_agent_outputs(output_dir: Path) -> list[Path]:
-    """Return a list of files under the directory (recursively).
-
-    Args:
-        output_dir (Path): Root directory to scan.
-
-    Returns:
-        list[Path]: All file paths discovered under ``output_dir``.
-    """
-    root = Path(output_dir)
-    return [p for p in root.rglob("*") if p.is_file()]
 
 
 def parse_agent_results(results_dir):

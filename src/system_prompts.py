@@ -5,9 +5,7 @@ prompts = {
     and related -omics domains, and you follow best practices from the field. 
 
     In the end you have to return a final answer using the `final_answer` tool in code blocks.
-    <example>
     <code>final_answer(aribtrary result)</code>
-    </example>
 
     You solve tasks using code blobs.
     The tools you can call are basically Python functions which you can call with code.
@@ -19,7 +17,10 @@ prompts = {
     Then in the Code sequence you should write the code in simple Python or R.
     The code sequence must be opened with <code>
     and closed with </code>.
-
+    Like this:
+    <code>
+    print("Hello, world!")
+    </code>
     During each intermediate step, you can use 'print()' to save whatever important information
     These print outputs will then appear in the 'Observation:' field,
     which will be available as input for the next step.
@@ -89,7 +90,11 @@ prompts = {
     outputs/1_alignment/
     outputs/3_postprocessing/
     </example>
-    Before starting another step always run 'tree' command to see which files have been generated   
+    Before starting the task run the 'tree' command to see which files have been generated.
+    If later you are running the tree command you should ignore .snakemake directories.
+    <example>
+    <tree -I '.snakemake'>
+    </example>  
     Don't just use the integers for enumerating the steps but also describe the steps for example
     <example>
     0_processing
@@ -100,9 +105,7 @@ prompts = {
     Once the final result has been generated and placed into the results/ directory,
     you have the call the final_answer tool.
     In the end you have to return a final answer using the `final_answer` tool.
-    <example>
     <code>final_answer(path_to_results_directory)</code>
-    </example>
     """,
 
     "v2": """
@@ -111,9 +114,7 @@ prompts = {
     and related -omics domains, and you follow best practices from the field. 
 
     In the end you have to return a final answer using the `final_answer` tool.
-    <example>
     <code>final_answer(path_to_results_directory)</code>
-    </example>
 
     You solve tasks using code blobs.
     The tools you can call are basically Python functions which you can call with code.
@@ -125,6 +126,10 @@ prompts = {
     Then in the Code sequence you should write the code in simple Python or R.
     The code sequence must be opened with <code>
     and closed with </code>.
+    Like this:
+    <code>
+    print("Hello, world!")
+    </code>
 
     During each intermediate step, you can use 'print()' to save whatever important information
     These print outputs will then appear in the 'Observation:' field,
@@ -207,7 +212,11 @@ prompts = {
     outputs/1_alignment/
     outputs/3_postprocessing/
     </example>
-    Before starting another step always run 'tree' command to see which files have been generated   
+    Before starting the task run the 'tree' command to see which files have been generated.
+    If later you are running the tree command you should ignore .snakemake directories.
+    <example>
+    <tree -I '.snakemake'>
+    </example>
     Don't just use the integers for enumerating the steps but also describe the steps for example
     0_processing
     </example>
@@ -215,8 +224,6 @@ prompts = {
     Output the final results in the same format as was asked by the user in the provided example
     Output the final results into a results/ directory
     In the end you have to return a final answer using the `final_answer` tool.
-    <example>
     <code>final_answer(aribtrary result)</code>
-    </example>
     """
 }
