@@ -208,9 +208,6 @@ def minimal_tool_environmet() -> None:
         data_root=DATA_ROOT,
     )
     for task in datasets:
-        if task.task_id != "transcript-quant":
-            continue
-
         tool_names = REGISTRY.tool_names_for_task(task.task_id)
         run_config = _build_run_config(
             task=task,
@@ -249,9 +246,6 @@ def expanded_tool_environmet() -> None:
         data_root=DATA_ROOT,
     )
     for task in datasets:
-        if task.task_id != "transcript-quant":
-            continue
-
         base_tool_names = REGISTRY.tool_names_for_task(task.task_id)
         random_tool_names = REGISTRY.sample_additional_tool_names(
             exclude=base_tool_names,
@@ -298,13 +292,7 @@ def all_tools_environment() -> None:
         data_root=DATA_ROOT,
     )
     for task in datasets:
-        if task.task_id != "transcript-quant":
-            continue
-
         tool_names = REGISTRY.all_tool_names()
-        print('All tools environment')
-        print(tool_names)
-        print('-'*100)
         run_config = _build_run_config(
             task=task,
             system_prompt_name='v2',
@@ -329,9 +317,8 @@ def all_tools_environment() -> None:
 
 
 if __name__ == "__main__":
-    # for i in range(3):
-    #     open_environment()
-    #     minimal_tool_environmet()
-    #     expanded_tool_environmet()
-    #     all_tools_environment()
-    minimal_tool_environmet()
+    for i in range(3):
+        open_environment()
+        minimal_tool_environmet()
+        expanded_tool_environmet()
+        all_tools_environment()

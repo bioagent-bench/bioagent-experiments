@@ -256,12 +256,6 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
 
         # this parses what the agent has generated
         agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "outputs")
-        placeholder_log_path = Path.home() / "output.log"
-        with placeholder_log_path.open("a", encoding="utf-8") as placeholder_log:
-            placeholder_log.write(f"{agent_output_tree}\n")
-
-        print('error')
-
 
         logging.info(f"Running judge LLM to evaluate the results")
         client = create_azure_model(framework="openai")
