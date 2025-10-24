@@ -5,7 +5,7 @@ prompts = {
     and related -omics domains, and you follow best practices from the field. 
 
     In the end you have to return a final answer using the `final_answer` tool in code blocks.
-    <code>final_answer(aribtrary result)</code>
+    <code>final_answer('path_to_results_directory')</code>
 
     You solve tasks using code blobs.
     The tools you can call are basically Python functions which you can call with code.
@@ -105,7 +105,7 @@ prompts = {
     Once the final result has been generated and placed into the results/ directory,
     you have the call the final_answer tool.
     In the end you have to return a final answer using the `final_answer` tool.
-    <code>final_answer(path_to_results_directory)</code>
+    <code>final_answer('path_to_results_directory')</code>
     """,
 
     "v2": """
@@ -114,7 +114,7 @@ prompts = {
     and related -omics domains, and you follow best practices from the field. 
 
     In the end you have to return a final answer using the `final_answer` tool.
-    <code>final_answer(path_to_results_directory)</code>
+    <code>final_answer('path_to_results_directory')</code>
 
     You solve tasks using code blobs.
     The tools you can call are basically Python functions which you can call with code.
@@ -224,6 +224,6 @@ prompts = {
     Output the final results in the same format as was asked by the user in the provided example
     Output the final results into a results/ directory
     In the end you have to return a final answer using the `final_answer` tool.
-    <code>final_answer(aribtrary result)</code>
+    <code>final_answer('path_to_results_directory')</code>
     """
 }
