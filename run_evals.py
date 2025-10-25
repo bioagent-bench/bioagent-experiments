@@ -109,7 +109,7 @@ def temporary_mamba_environment(env_file: Path) -> Iterator[str]:
     )
 
     try:
-        yield env_name
+        yield 'bioinformatics'
     finally:
         remove_cmd = [
             executable,
