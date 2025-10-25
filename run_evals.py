@@ -87,20 +87,18 @@ def temporary_mamba_environment(env_file: Path) -> Iterator[str]:
 
     # I wrapped this in a subprocess to avoid propaganting logs to my console
     # There is a lot of spam that made babysitting the agents difficult
-    executable = 'micromamba'
-    env_name = f"bioagent-eval-{uuid.uuid4().hex}"
-
+    executable = 'mamba'
     create_cmd = [
         executable,
         "env",
         "create",
         "--yes",
         "--name",
-        env_name,
+        "bioinformatics",
         "--file",
         str(env_file),
     ]
-    logging.info("Provisioning evaluation environment %s", env_name)
+    logging.info("Provisioning evaluation environment %s", "bioinformatics")
     subprocess.run(
         create_cmd,
         check=True,
@@ -119,9 +117,9 @@ def temporary_mamba_environment(env_file: Path) -> Iterator[str]:
             "remove",
             "--yes",
             "--name",
-            env_name,
+            "bioinformatics",
         ]
-        logging.info("Removing evaluation environment %s", env_name)
+        logging.info("Removing evaluation environment %s", "bioinformatics")
         result = subprocess.run(
             remove_cmd,
             check=False,
