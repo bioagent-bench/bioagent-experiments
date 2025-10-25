@@ -210,7 +210,6 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
             agent.prompt_templates["system_prompt"] = run_config.system_prompt
 
             run_start_time = time.perf_counter()
-            caught_error: AgentError | None = None
             try:
                 logging.info(
                     f"Running agent with task prompt: {run_config.task_prompt 
@@ -218,14 +217,21 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
                 )
                 results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
                 logging.info(f"Agent finished running with results: {results}")
+
+                if results.token_usage is not None:
+                    run_config.input_tokens = results.token_usage.input_tokens
+                    run_config.output_tokens = results.token_usage.output_tokens
+                else:
+                    run_config.input_tokens = 0.0
+                    run_config.output_tokens = 0.0
+                run_config.steps = len(results.steps)
             except AgentError as error:
-                caught_error = error
                 logging.error(f"Agent finished running with error: {error}")
                 elapsed_minutes = (time.perf_counter() - run_start_time) / 60
                 run_config.duration = elapsed_minutes
                 run_config.steps = len(agent.memory.steps)
                 partial_steps = agent.memory.get_full_steps()
-                run_config.partial_steps = partial_steps
+                run_config.steps = len(partial_steps)
                 token_steps = [
                     step
                     for step in agent.memory.steps
@@ -237,22 +243,9 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
                 run_config.output_tokens = total_output_tokens
                 run_config.error_type = type(error).__name__
                 run_config.error_message = str(error)
-                run_config.eval_results = None
-                run_config.save_run_metadata()
-                return run_config
 
         # collect stuff from the results
-        if results.token_usage is not None:
-            run_config.input_tokens = results.token_usage.input_tokens
-            run_config.output_tokens = results.token_usage.output_tokens
-        else:
-            run_config.input_tokens = 0.0
-            run_config.output_tokens = 0.0
         run_config.duration = results.timing.duration / 60
-        run_config.steps = len(results.steps)
-        run_config.error_type = None
-        run_config.error_message = None
-        run_config.partial_steps = None
 
         # this parses what the agent has generated
         agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "outputs")
