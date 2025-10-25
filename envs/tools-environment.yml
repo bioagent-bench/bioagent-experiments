@@ -1,7 +1,7 @@
 name: bioagent-eval-tools
 channels:
-  - bioconda
   - conda-forge
+  - bioconda
 dependencies:
   - pip
   - r-base

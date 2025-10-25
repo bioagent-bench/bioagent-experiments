@@ -87,7 +87,7 @@ def temporary_mamba_environment(env_file: Path) -> Iterator[str]:
 
     # I wrapped this in a subprocess to avoid propaganting logs to my console
     # There is a lot of spam that made babysitting the agents difficult
-    executable = 'mamba'
+    executable = 'micromamba'
     env_name = f"bioagent-eval-{uuid.uuid4().hex}"
 
     create_cmd = [

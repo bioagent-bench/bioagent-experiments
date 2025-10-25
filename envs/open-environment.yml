@@ -1,7 +1,7 @@
 name: bioagent-eval
 channels:
-  - bioconda
   - conda-forge
+  - bioconda
 dependencies:
   - python=3.13
   - pip
