@@ -207,6 +207,8 @@ def minimal_tool_environmet() -> None:
     )
     for task in datasets:
         tool_names = REGISTRY.tool_names_for_task(task.task_id)
+        if task.task_id == "single-cell":
+            continue
         run_config = _build_run_config(
             task=task,
             system_prompt_name='v2',
@@ -244,6 +246,8 @@ def expanded_tool_environmet() -> None:
         data_root=DATA_ROOT,
     )
     for task in datasets:
+        if task.task_id == "single-cell":
+            continue
         base_tool_names = REGISTRY.tool_names_for_task(task.task_id)
         random_tool_names = REGISTRY.sample_additional_tool_names(
             exclude=base_tool_names,
@@ -290,6 +294,8 @@ def all_tools_environment() -> None:
         data_root=DATA_ROOT,
     )
     for task in datasets:
+        if task.task_id == "single-cell":
+            continue
         tool_names = REGISTRY.all_tool_names()
         run_config = _build_run_config(
             task=task,
@@ -315,8 +321,8 @@ def all_tools_environment() -> None:
 
 
 if __name__ == "__main__":
-    for i in range(3):
-        open_environment()
-        minimal_tool_environmet()
+    for i in range(2):
+        # open_environment()
+        # minimal_tool_environmet()
         expanded_tool_environmet()
-        all_tools_environment()
+        # all_tools_environment()

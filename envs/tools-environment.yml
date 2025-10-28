@@ -1,4 +1,4 @@
-name: bioagent-eval-tools
+name: bioinformatics
 channels:
   - conda-forge
   - bioconda
