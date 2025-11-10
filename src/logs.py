@@ -103,7 +103,6 @@ class RunConfig:
             error_message=payload.get("error_message"),
             run_dir_path=Path(run_dir_path_raw),
             data_path=Path(data_path_raw),
-            otel_sink_host=payload.get("otel_sink_host", "127.0.0.1"),
-            otel_sink_port=int(payload.get("otel_sink_port", 4317)),
+            otel_sink_host=payload.get("otel_sink_host"),
             otel_sink_path=Path(payload["otel_sink_path"])
         )
