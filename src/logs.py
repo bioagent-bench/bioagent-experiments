@@ -37,8 +37,6 @@ class RunConfig:
     otel_sink_path: Path
     task_id: str
     task_prompt: str
-    max_steps: int
-    planning_interval: int
     num_tools: int
     tool_names: List[str]
     system_prompt: str
@@ -48,13 +46,10 @@ class RunConfig:
     duration: float = 0.0
     eval_results: EvaluationResults | EvaluationResultsGiab | None = None
     steps: int = 0
-    input_tokens: float = 0.0
-    output_tokens: float = 0.0
     tools: List[Any] = field(default_factory=list, repr=False)
     error_type: str | None = None
     error_message: str | None = None
-    otel_sink_host: str = "127.0.0.1"
-    otel_sink_port: int = 4317
+    otel_sink_host: str = "127.0.0.1:4317"
 
     def save_run_metadata(self) -> None:
         metadata = {
@@ -63,8 +58,6 @@ class RunConfig:
             "timestamp": self.timestamp.isoformat(),
             "task_id": self.task_id,
             "task_prompt": self.task_prompt,
-            "max_steps": self.max_steps,
-            "planning_interval": self.planning_interval,
             "num_tools": self.num_tools,
             "tool_names": list(self.tool_names),
             "tools": list(self.tool_names),
@@ -73,16 +66,12 @@ class RunConfig:
             "experiment_name": self.experiment_name,
             "model": self.model,
             "duration": self.duration,
-            "steps": self.steps,
-            "input_tokens": self.input_tokens,
-            "output_tokens": self.output_tokens,
             "error_type": self.error_type,
             "error_message": self.error_message,
             "eval_results": _serialize_eval_results(self.eval_results),
             "run_dir_path": str(self.run_dir_path),
             "data_path": str(self.data_path),
             "otel_sink_host": self.otel_sink_host,
-            "otel_sink_port": self.otel_sink_port,
             "otel_sink_path": str(self.otel_sink_path),
         }
         self.metadata_path.parent.mkdir(parents=True, exist_ok=True)
@@ -102,8 +91,6 @@ class RunConfig:
             timestamp=datetime.fromisoformat(timestamp_raw),
             task_id=payload["task_id"],
             task_prompt=payload["task_prompt"],
-            max_steps=payload["max_steps"],
-            planning_interval=payload["planning_interval"],
             num_tools=payload.get("num_tools", len(tool_names)),
             tool_names=list(tool_names),
             system_prompt=payload["system_prompt"],
@@ -112,9 +99,6 @@ class RunConfig:
             model=payload["model"],
             duration=payload.get("duration", 0.0),
             eval_results=payload.get("eval_results"),
-            steps=payload.get("steps", 0),
-            input_tokens=payload.get("input_tokens", 0.0),
-            output_tokens=payload.get("output_tokens", 0.0),
             error_type=payload.get("error_type"),
             error_message=payload.get("error_message"),
             run_dir_path=Path(run_dir_path_raw),

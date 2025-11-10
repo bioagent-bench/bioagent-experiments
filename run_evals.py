@@ -120,8 +120,6 @@ def run_otel_module(host: str, ndjson_path: str) -> Iterator[None]:
 
 
 def open_environment() -> None:
-    MAX_STEPS = 20
-    PLANNING_INTERVAL = 1
     EXPERIMENT_NAME = "open-environment"
     MODEL_NAME = "azure"
 
@@ -129,15 +127,10 @@ def open_environment() -> None:
     datasets = DataSet.load_all(metadata_path=METADATA_PATH, data_root=DATA_ROOT)
 
     for task in datasets:
-        if task.task_id != "transcript-quant":
-            continue
-
         run_config = _build_run_config(
             task=task,
             system_prompt_name="v1",
             run_logs=RUN_LOGS,
-            max_steps=MAX_STEPS,
-            planning_interval=PLANNING_INTERVAL,
             experiment_name=EXPERIMENT_NAME,
             model=MODEL_NAME,
             tool_names=(),
