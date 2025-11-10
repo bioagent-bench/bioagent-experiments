@@ -26,8 +26,6 @@ def _build_run_config(
     task: DataSet,
     system_prompt_name: str,
     run_logs: Path,
-    max_steps: int,
-    planning_interval: int,
     experiment_name: str,
     model: str,
     tool_names: Sequence[str],
@@ -47,8 +45,6 @@ def _build_run_config(
         timestamp=timestamp,
         task_id=task.task_id,
         task_prompt=task.task_prompt,
-        max_steps=max_steps,
-        planning_interval=planning_interval,
         num_tools=len(tool_names),
         tool_names=list(tool_names),
         system_prompt=system_prompt,
@@ -87,7 +83,7 @@ def _run_eval_subprocess(env_name: str, config_path: Path) -> None:
 def run_otel_module(host: str, ndjson_path: str) -> Iterator[None]:
     """
     Launch the OTEL sink as a separate Python module process:
-      python -m otel --host ... --port ... --path ...
+      python -m otel --host ... --path ...
     Ensures clean shutdown on exit.
     """
     args = [
@@ -142,9 +138,7 @@ def open_environment() -> None:
         run_config.save_run_metadata()
 
         logging.info(
-            "Starting per-run OTEL sink (module) port=%s -> %s",
-            run_config.otel_sink_port,
-            str(run_config.otel_sink_path.resolve()),
+            "Starting per-run OTEL sink"
         )
 
         with run_otel_module(
