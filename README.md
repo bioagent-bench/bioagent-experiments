@@ -9,6 +9,11 @@ Python and R installations from the start.
 ### Miniforge installation for mamba
 https://github.com/conda-forge/miniforge
 
+### Codex
+```bash
+npm i -g @openai/codex
+```
+
 ### uv package manager
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -21,6 +26,9 @@ uv sync
 2. Define where you want to store the run logs
 ```bash
 export RUN_LOGS=/home/user/run_logs/
+```
+```bash
+export AUZRE_OPENAI_API_KEY=""
 ```
 
 3. Install bioinformatics-mcp package

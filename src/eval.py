@@ -4,17 +4,11 @@ import argparse
 import logging
 import os
 import shutil
+import subprocess
 import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
-
-from openinference.instrumentation.smolagents import SmolagentsInstrumentor
-from phoenix.otel import register
-from smolagents import CodeAgent
-from smolagents.memory import ActionStep, PlanningStep
-from smolagents.utils import AgentError
-from opentelemetry import trace
 
 from .judge_agent import (
     EvaluationResults,
@@ -33,9 +27,6 @@ from .tools import REGISTRY
 
 
 configure_logging()
-
-SmolagentsInstrumentor().instrument()
-register(project_name="bioagent-experiments")
 
 def load_run_config(config_path: Path) -> RunConfig:
     """Load a ``RunConfig`` instance from a metadata JSON file.
@@ -172,143 +163,93 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     create_dirs(run_dir_path)
 
-    # Add run_hash as custom attribute to Phoenix traces
-    tracer = trace.get_tracer(__name__)
-    with tracer.start_as_current_span(run_config.run_hash) as span:
-        span.set_attribute("task_id", run_config.task_id)
-        span.set_attribute("experiment_name", run_config.experiment_name)
-        span.set_attribute("model", run_config.model)
+    outputs_root = run_dir_path / "outputs"
+    results_root = run_dir_path / "results"
 
-        outputs_root = run_dir_path / "outputs"
-        results_root = run_dir_path / "results"
+    input_data: list[Path] = []
 
-        input_data: list[Path] = []
+    with isolated_run_environment(run_dir_path, inputs_root) as run_inputs_root:
+        data_dir = run_inputs_root / "data"
+        reference_dir = run_inputs_root / "reference"
 
-        with isolated_run_environment(run_dir_path, inputs_root) as run_inputs_root:
-            data_dir = run_inputs_root / "data"
-            reference_dir = run_inputs_root / "reference"
+        executor_kwargs: dict[str, Any] = {
+            "output_path": str(outputs_root),
+            "results_path": str(results_root),
+        }
+        if data_dir.exists():
+            executor_kwargs["data_path"] = str(data_dir)
+        if reference_dir.exists():
+            executor_kwargs["reference_path"] = str(reference_dir)
 
-            executor_kwargs: dict[str, Any] = {
-                "output_path": str(outputs_root),
-                "results_path": str(results_root),
-            }
-            if data_dir.exists():
-                executor_kwargs["data_path"] = str(data_dir)
-            if reference_dir.exists():
-                executor_kwargs["reference_path"] = str(reference_dir)
+        input_data = glob_input_data(data_dir, reference_dir)
 
-            input_data = glob_input_data(data_dir, reference_dir)
 
-            agent = CodeAgent(
-                max_steps=run_config.max_steps,
-                model=load_model(run_config.model),
-                tools=run_config.tools,
-                additional_authorized_imports=["*"],
-                planning_interval=run_config.planning_interval,
-                return_full_result=True,
-            )
-            agent.prompt_templates["system_prompt"] = run_config.system_prompt
+        prompt = run_config.system_prompt + "\n\n" + run_config.task_prompt + f"\n\nThe input data is: {input_data}"
+        # subprocess.run(["codex", "exec", prompt, "--skip-git-repo-check", "--yolo"])
+        subprocess.run(["codex", "exec", "hello", "--skip-git-repo-check", "--yolo"])
 
-            run_start_time = time.perf_counter()
-            try:
-                logging.info(
-                    f"Running agent with task prompt: {run_config.task_prompt 
-                    + f'\n\nThe input data is: {input_data}'}"
-                )
-                results = agent.run(run_config.task_prompt + f"\n\nThe input data is: {input_data}")
-                logging.info(f"Agent finished running with results: {results}")
-
-                if results.token_usage is not None:
-                    run_config.input_tokens = results.token_usage.input_tokens
-                    run_config.output_tokens = results.token_usage.output_tokens
-                else:
-                    run_config.input_tokens = 0.0
-                    run_config.output_tokens = 0.0
-                run_config.steps = len(results.steps)
-            except AgentError as error:
-                logging.error(f"Agent finished running with error: {error}")
-                elapsed_minutes = (time.perf_counter() - run_start_time) / 60
-                run_config.duration = elapsed_minutes
-                run_config.steps = len(agent.memory.steps)
-                partial_steps = agent.memory.get_full_steps()
-                run_config.steps = len(partial_steps)
-                token_steps = [
-                    step
-                    for step in agent.memory.steps
-                    if isinstance(step, (ActionStep, PlanningStep)) and step.token_usage is not None
-                ]
-                total_input_tokens = sum(step.token_usage.input_tokens for step in token_steps)
-                total_output_tokens = sum(step.token_usage.output_tokens for step in token_steps)
-                run_config.input_tokens = total_input_tokens
-                run_config.output_tokens = total_output_tokens
-                run_config.error_type = type(error).__name__
-                run_config.error_message = str(error)
-
-        # collect stuff from the results
-        run_config.duration = results.timing.duration / 60
-
-        # this parses what the agent has generated
         agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "outputs")
 
-        logging.info(f"Running judge LLM to evaluate the results")
-        client = create_azure_model(framework="openai")
+    #     client = create_azure_model(framework="openai")
 
-        if run_config.task_id == "giab":
-            agent_results = eval_giab_metrics(
-                run_config.run_dir_path / "results",
-                run_config.data_path / "results",
-                inputs_root / "data" / "Agilent_v7.chr.bed",
-                inputs_root / "reference" / "Homo_sapiens_assembly38.fasta",
-            )
-            judge_prompt = build_judge_prompt_giab(
-                input_data,
-                run_config.task_prompt,
-                agent_output_tree,
-                agent_results,
-            )
-            completion = client.beta.chat.completions.parse(
-                model="gpt-5",
-                messages=[{"role": "user", "content": judge_prompt}],
-                response_format=EvaluationResultsGiabSchema,
-            )
-            parsed_response = completion.choices[0].message.parsed
-            final_result = EvaluationResultsGiab(
-                steps_completed=parsed_response.steps_completed,
-                steps_to_completion=parsed_response.steps_to_completion,
-                final_results_reached=parsed_response.final_results_reached,
-                f1_score=parsed_response.f1_score,
-                notes=parsed_response.notes,
-            )
+    #     logging.info(f"Running judge LLM to evaluate the results")
 
-        else:
-            agent_results = parse_agent_results(run_config.run_dir_path / "results")
-            truth_results = parse_agent_results(run_config.data_path / "results")
-            judge_prompt = build_judge_prompt_csv(
-                input_data,
-                run_config.task_prompt,
-                agent_output_tree,
-                agent_results,
-                truth_results,
-            )
-            completion = client.beta.chat.completions.parse(
-                model="gpt-5",
-                messages=[{"role": "user", "content": judge_prompt}],
-                response_format=EvaluationResultsSchema,
-            )
-            parsed_response = completion.choices[0].message.parsed
-            final_result = EvaluationResults(
-                steps_completed=parsed_response.steps_completed,
-                steps_to_completion=parsed_response.steps_to_completion,
-                final_result_reached=parsed_response.final_result_reached,
-                notes=parsed_response.notes,
-            )
+    #     if run_config.task_id == "giab":
+    #         agent_results = eval_giab_metrics(
+    #             run_config.run_dir_path / "results",
+    #             run_config.data_path / "results",
+    #             inputs_root / "data" / "Agilent_v7.chr.bed",
+    #             inputs_root / "reference" / "Homo_sapiens_assembly38.fasta",
+    #         )
+    #         judge_prompt = build_judge_prompt_giab(
+    #             input_data,
+    #             run_config.task_prompt,
+    #             agent_output_tree,
+    #             agent_results,
+    #         )
+    #         completion = client.beta.chat.completions.parse(
+    #             model="gpt-5",
+    #             messages=[{"role": "user", "content": judge_prompt}],
+    #             response_format=EvaluationResultsGiabSchema,
+    #         )
+    #         parsed_response = completion.choices[0].message.parsed
+    #         final_result = EvaluationResultsGiab(
+    #             steps_completed=parsed_response.steps_completed,
+    #             steps_to_completion=parsed_response.steps_to_completion,
+    #             final_results_reached=parsed_response.final_results_reached,
+    #             f1_score=parsed_response.f1_score,
+    #             notes=parsed_response.notes,
+    #         )
 
-        logging.info(f"Judge LLM finished running with results: {final_result}")
-        run_config.eval_results = final_result
-        run_config.save_run_metadata()
-        logging.info(f"Run configuration saved with results: {run_config.eval_results}")
+    #     else:
+    #         agent_results = parse_agent_results(run_config.run_dir_path / "results")
+    #         truth_results = parse_agent_results(run_config.data_path / "results")
+    #         judge_prompt = build_judge_prompt_csv(
+    #             input_data,
+    #             run_config.task_prompt,
+    #             agent_output_tree,
+    #             agent_results,
+    #             truth_results,
+    #         )
+    #         completion = client.beta.chat.completions.parse(
+    #             model="gpt-5",
+    #             messages=[{"role": "user", "content": judge_prompt}],
+    #             response_format=EvaluationResultsSchema,
+    #         )
+    #         parsed_response = completion.choices[0].message.parsed
+    #         final_result = EvaluationResults(
+    #             steps_completed=parsed_response.steps_completed,
+    #             steps_to_completion=parsed_response.steps_to_completion,
+    #             final_result_reached=parsed_response.final_result_reached,
+    #             notes=parsed_response.notes,
+    #         )
 
-    return run_config
+    #     logging.info(f"Judge LLM finished running with results: {final_result}")
+    #     run_config.eval_results = final_result
+    #     run_config.save_run_metadata()
+    #     logging.info(f"Run configuration saved with results: {run_config.eval_results}")
+
+    # return run_config
 
 
 def run_from_config(config_path: Path) -> RunConfig:

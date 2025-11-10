@@ -1,26 +1,5 @@
 import json
 import logging
-
-def configure_logging(level: int = logging.INFO) -> None:
-    """Set up console logging for runners and agents.
-
-    Args:
-        level (int): Logging level to apply to the root logger.
-
-    Returns:
-        None: This function configures global logging handlers.
-    """
-
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level)
-
-    if not root_logger.handlers:
-        handler = logging.StreamHandler()
-        handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        )
-        root_logger.addHandler(handler)
-
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime
 from pathlib import Path
@@ -29,13 +8,23 @@ from typing import Any, List, Optional
 from .judge_agent import EvaluationResults, EvaluationResultsGiab
 
 
+def configure_logging(level: int = logging.INFO) -> None:
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    if not root_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
+        root_logger.addHandler(handler)
+
+
 def _serialize_eval_results(results: EvaluationResults | EvaluationResultsGiab | None) -> Any:
     """We need to convert the result classes to JSON"""
     if results is None:
         return None
     if is_dataclass(results):
         return asdict(results)
-    return results
 
 
 @dataclass
@@ -43,6 +32,9 @@ class RunConfig:
     run_hash: str
     metadata_path: Path
     timestamp: datetime
+    run_dir_path: Path
+    data_path: Path
+    otel_sink_path: Path
     task_id: str
     task_prompt: str
     max_steps: int
@@ -58,22 +50,13 @@ class RunConfig:
     steps: int = 0
     input_tokens: float = 0.0
     output_tokens: float = 0.0
+    tools: List[Any] = field(default_factory=list, repr=False)
     error_type: str | None = None
     error_message: str | None = None
-    partial_steps: list[dict[str, Any]] | None = None
-    run_dir_path: Optional[Path] = None
-    data_path: Optional[Path] = None
-    tools: List[Any] = field(default_factory=list, repr=False)
+    otel_sink_host: str = "127.0.0.1"
+    otel_sink_port: int = 4317
 
     def save_run_metadata(self) -> None:
-        """Save metadata about the experiment run.
-
-        Raises:
-            ValueError: If ``self.metadata_path`` is not defined.
-
-        Returns:
-            None: This method writes metadata to ``self.metadata_path``.
-        """
         metadata = {
             "run_hash": self.run_hash,
             "metadata_path": str(self.metadata_path),
@@ -95,35 +78,25 @@ class RunConfig:
             "output_tokens": self.output_tokens,
             "error_type": self.error_type,
             "error_message": self.error_message,
-            "partial_steps": self.partial_steps,
             "eval_results": _serialize_eval_results(self.eval_results),
             "run_dir_path": str(self.run_dir_path),
             "data_path": str(self.data_path),
+            "otel_sink_host": self.otel_sink_host,
+            "otel_sink_port": self.otel_sink_port,
+            "otel_sink_path": str(self.otel_sink_path),
         }
-
         self.metadata_path.parent.mkdir(parents=True, exist_ok=True)
         self.metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
     @classmethod
     def load_run_metadata(cls, file_path: Path) -> "RunConfig":
-        """Load a ``RunConfig`` from a run metadata JSON file.
-
-        Args:
-            file_path (Path): Path to a run metadata JSON file.
-
-        Returns:
-            RunConfig: Deserialized run configuration populated from metadata.
-        """
-
         payload = json.loads(file_path.read_text(encoding="utf-8"))
         timestamp_raw = payload.get("timestamp")
-
         tool_names = payload.get("tool_names") or payload.get("tools") or []
-
         run_dir_path_raw = payload.get("run_dir_path")
         data_path_raw = payload.get("data_path")
 
-        run_config = cls(
+        return cls(
             run_hash=payload["run_hash"],
             metadata_path=file_path,
             timestamp=datetime.fromisoformat(timestamp_raw),
@@ -144,9 +117,9 @@ class RunConfig:
             output_tokens=payload.get("output_tokens", 0.0),
             error_type=payload.get("error_type"),
             error_message=payload.get("error_message"),
-            partial_steps=payload.get("partial_steps"),
             run_dir_path=Path(run_dir_path_raw),
             data_path=Path(data_path_raw),
+            otel_sink_host=payload.get("otel_sink_host", "127.0.0.1"),
+            otel_sink_port=int(payload.get("otel_sink_port", 4317)),
+            otel_sink_path=Path(payload["otel_sink_path"])
         )
-
-        return run_config

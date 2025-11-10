@@ -1,9 +1,9 @@
-"""Orchestrate evaluation loops with per-run mamba environments."""
-
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import uuid
 from contextlib import contextmanager
 import logging
@@ -32,29 +32,16 @@ def _build_run_config(
     model: str,
     tool_names: Sequence[str],
 ) -> RunConfig:
-    """Construct the ``RunConfig`` for ``src.eval`` using dataset metadata.
-
-    Args:
-        task (DataSet): Dataset metadata describing the task to evaluate.
-        system_prompt_name (str): Key into ``system_prompts.prompts``.
-        run_logs (Path): Base directory for runs and logs.
-        max_steps (int): Maximum agent steps.
-        planning_interval (int): Planning interval for the agent.
-        experiment_name (str): Name of the experiment.
-        model (str): Model identifier string (e.g., ``"azure"``).
-        tool_names (Sequence[str]): Tool identifiers to hand to the agent.
-
-    Returns:
-        RunConfig: Configuration describing the run metadata.
-    """
     timestamp = datetime.now()
     system_prompt = prompts.get(system_prompt_name)
 
     run_hash = str(uuid.uuid4())
     run_root = run_logs / experiment_name / task.task_id / run_hash
-    metadata_path = run_logs / f"{run_hash}.json"
+    metadata_path = run_logs / "runs" / f"{run_hash}.json"
 
-    run_config = RunConfig(
+    otel_path = run_logs / "otel" / f"otlp-{run_hash}.ndjson"
+
+    return RunConfig(
         metadata_path=metadata_path,
         run_hash=run_hash,
         timestamp=timestamp,
@@ -70,259 +57,113 @@ def _build_run_config(
         model=model,
         run_dir_path=run_root,
         data_path=Path(task.path) if task.path else None,
+        otel_sink_host="127.0.0.1:4317",
+        otel_sink_path=otel_path,
     )
-
-    return run_config
 
 
 @contextmanager
 def temporary_mamba_environment(env_file: Path) -> Iterator[str]:
-    """Provision a throwaway mamba environment and clean it up afterwards.
-    Args:
-        env_file (Path): Path to the environment file to use.
-
-    Yields:
-        Iterator[str]: The name of the newly created environment.
-    """
-
-    # I wrapped this in a subprocess to avoid propaganting logs to my console
-    # There is a lot of spam that made babysitting the agents difficult
-    executable = 'mamba'
-    create_cmd = [
-        executable,
-        "env",
-        "create",
-        "--yes",
-        "--name",
-        "bioinformatics",
-        "--file",
-        str(env_file),
-    ]
+    executable = "mamba"
+    create_cmd = [executable, "env", "create", "--yes", "--name", "bioinformatics", "--file", str(env_file)]
     logging.info("Provisioning evaluation environment %s", "bioinformatics")
-    subprocess.run(
-        create_cmd,
-        check=True,
-        cwd=PROJECT_ROOT,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-
+    subprocess.run(create_cmd, check=True, cwd=PROJECT_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
-        yield 'bioinformatics'
+        yield "bioinformatics"
     finally:
-        remove_cmd = [
-            executable,
-            "env",
-            "remove",
-            "--yes",
-            "--name",
-            "bioinformatics",
-        ]
+        remove_cmd = [executable, "env", "remove", "--yes", "--name", "bioinformatics"]
         logging.info("Removing evaluation environment %s", "bioinformatics")
-        result = subprocess.run(
-            remove_cmd,
-            check=False,
-            cwd=PROJECT_ROOT,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
+        subprocess.run(remove_cmd, check=False, cwd=PROJECT_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
 
 def _run_eval_subprocess(env_name: str, config_path: Path) -> None:
-    """Run ``src.eval`` in a subprocess inside the provided environment.
-
-    Args:
-        env_name (str): Name of the mamba environment to use.
-        config_path (Path): Path to the serialised run configuration.
-    """
-
     executable = "mamba"
-    cmd = [
-        executable,
-        "run",
-        "--name",
-        env_name,
-        "python",
-        "-m",
-        "src.eval",
-        "--config",
-        str(config_path),
-    ]
+    cmd = [executable, "run", "--name", env_name, "python", "-m", "src.eval", "--config", str(config_path)]
+    env = os.environ.copy()
+    subprocess.run(cmd, check=True, cwd=PROJECT_ROOT, env=env)
 
-    subprocess.run(cmd, check=True, cwd=PROJECT_ROOT)
+
+@contextmanager
+def run_otel_module(host: str, ndjson_path: str) -> Iterator[None]:
+    """
+    Launch the OTEL sink as a separate Python module process:
+      python -m otel --host ... --port ... --path ...
+    Ensures clean shutdown on exit.
+    """
+    args = [
+        sys.executable,
+        "-m",
+        "otel",
+        "--host",
+        str(host),
+        "--path",
+        str(ndjson_path),
+    ]
+    os.makedirs(os.path.dirname(ndjson_path) or ".", exist_ok=True)
+
+    proc = subprocess.Popen(args, cwd=PROJECT_ROOT)  # inherit stdout/stderr
+    try:
+        yield
+    finally:
+        # Graceful stop; send SIGINT then wait, fall back to kill
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
 
 
 def open_environment() -> None:
-    """Models have no tools"""
-
     MAX_STEPS = 20
     PLANNING_INTERVAL = 1
     EXPERIMENT_NAME = "open-environment"
     MODEL_NAME = "azure"
 
     configure_logging()
-    datasets = DataSet.load_all(
-        metadata_path=METADATA_PATH,
-        data_root=DATA_ROOT,
-    )
+    datasets = DataSet.load_all(metadata_path=METADATA_PATH, data_root=DATA_ROOT)
 
     for task in datasets:
-        run_config = _build_run_config(
-            task=task,
-            system_prompt_name='v1',
-            run_logs=RUN_LOGS,
-            max_steps=MAX_STEPS,
-            planning_interval=PLANNING_INTERVAL,
-            experiment_name=EXPERIMENT_NAME,
-            model=MODEL_NAME,
-            tool_names=("run_terminal_command",),
-        )
-
-        run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
-        run_config.save_run_metadata()
-
-        with temporary_mamba_environment(env_file=Path("envs/open-environment.yml")) as env_name:
-            print(f"Running task '{task.task_id}' in environment '{env_name}'.")
-            try:
-                _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
-                print(f"Completed task '{task.task_id}'.")
-            except subprocess.CalledProcessError as e:
-                print(e)
-
-
-def minimal_tool_environmet() -> None:
-    """Models have minimal tools"""
-
-    MAX_STEPS = 20
-    PLANNING_INTERVAL = 1
-    EXPERIMENT_NAME = "minimal-tool-environment"
-    MODEL_NAME = "azure"
-
-
-    configure_logging()
-    datasets = DataSet.load_all(
-        metadata_path=METADATA_PATH,
-        data_root=DATA_ROOT,
-    )
-    for task in datasets:
-        tool_names = REGISTRY.tool_names_for_task(task.task_id)
-        if task.task_id == "single-cell":
+        if task.task_id != "transcript-quant":
             continue
+
         run_config = _build_run_config(
             task=task,
-            system_prompt_name='v2',
+            system_prompt_name="v1",
             run_logs=RUN_LOGS,
             max_steps=MAX_STEPS,
             planning_interval=PLANNING_INTERVAL,
             experiment_name=EXPERIMENT_NAME,
             model=MODEL_NAME,
-            tool_names=tool_names,
+            tool_names=(),
         )
 
+        # Ensure directories exist & save metadata early
         run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
+        run_config.otel_sink_path.parent.mkdir(parents=True, exist_ok=True)
         run_config.save_run_metadata()
 
-        with temporary_mamba_environment(env_file=Path("envs/tools-environment.yml")) as env_name:
-            print(f"Running task '{task.task_id}' in environment '{env_name}'.")
-            try:
+        logging.info(
+            "Starting per-run OTEL sink (module) port=%s -> %s",
+            run_config.otel_sink_port,
+            str(run_config.otel_sink_path.resolve()),
+        )
+
+        with run_otel_module(
+            host=run_config.otel_sink_host,
+            ndjson_path=str(run_config.otel_sink_path.resolve()),
+        ):
+            with temporary_mamba_environment(env_file=Path("envs/open-environment.yml")) as env_name:
+                print(f"Running task '{task.task_id}' in environment '{env_name}'.")
+                otlp_grpc_target = f"{run_config.otel_sink_host}"
                 _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
                 print(f"Completed task '{task.task_id}'.")
-            except subprocess.CalledProcessError as e:
-                print(e)
-
-
-def expanded_tool_environmet() -> None:
-    """Models are expanded with random unnecessary tools"""
-
-    MAX_STEPS = 20
-    PLANNING_INTERVAL = 1
-    EXPERIMENT_NAME = "expanded-tool-environment"
-    MODEL_NAME = "azure"
-
-    configure_logging()
-    datasets = DataSet.load_all(
-        metadata_path=METADATA_PATH,
-        data_root=DATA_ROOT,
-    )
-    for task in datasets:
-        if task.task_id == "single-cell":
-            continue
-        base_tool_names = REGISTRY.tool_names_for_task(task.task_id)
-        random_tool_names = REGISTRY.sample_additional_tool_names(
-            exclude=base_tool_names,
-            sample_size=10,
-        )
-        tool_names = REGISTRY.tool_names_for_task(
-            task.task_id,
-            extra_tool_names=random_tool_names,
-        )
-        run_config = _build_run_config(
-            task=task,
-            system_prompt_name='v2',
-            run_logs=RUN_LOGS,
-            max_steps=MAX_STEPS,
-            planning_interval=PLANNING_INTERVAL,
-            experiment_name=EXPERIMENT_NAME,
-            model=MODEL_NAME,
-            tool_names=tool_names,
-        )
-
-        run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
-        run_config.save_run_metadata()
-
-        with temporary_mamba_environment(env_file=Path("envs/tools-environment.yml")) as env_name:
-            print(f"Running task '{task.task_id}' in environment '{env_name}'.")
-            try:
-                _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
-                print(f"Completed task '{task.task_id}'.")
-            except subprocess.CalledProcessError as e:
-                print(e)
-
-
-def all_tools_environment() -> None:
-    """Models have full tools"""
-
-    MAX_STEPS = 20
-    PLANNING_INTERVAL = 1
-    EXPERIMENT_NAME = "all-tool-environment"
-    MODEL_NAME = "azure"
-
-    configure_logging()
-    datasets = DataSet.load_all(
-        metadata_path=METADATA_PATH,
-        data_root=DATA_ROOT,
-    )
-    for task in datasets:
-        if task.task_id == "single-cell":
-            continue
-        tool_names = REGISTRY.all_tool_names()
-        run_config = _build_run_config(
-            task=task,
-            system_prompt_name='v2',
-            run_logs=RUN_LOGS,
-            max_steps=MAX_STEPS,
-            planning_interval=PLANNING_INTERVAL,
-            experiment_name=EXPERIMENT_NAME,
-            model=MODEL_NAME,
-            tool_names=tool_names,
-        )
-
-        run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
-        run_config.save_run_metadata()
-
-        with temporary_mamba_environment(env_file=Path("envs/tools-environment.yml")) as env_name:
-            print(f"Running task '{task.task_id}' in environment '{env_name}'.")
-            try:
-                _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
-                print(f"Completed task '{task.task_id}'.")
-            except subprocess.CalledProcessError as e:
-                print(e)
-
+                
 
 if __name__ == "__main__":
-    for i in range(2):
-        # open_environment()
-        # minimal_tool_environmet()
-        expanded_tool_environmet()
-        # all_tools_environment()
+    open_environment()

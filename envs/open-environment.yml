@@ -8,13 +8,11 @@ dependencies:
   - r-base
   - r-essentials
   - pip:
+      - "smolagents @ git+https://github.com/dionizijefa/smolagents.git"
       - docker>=7.1.0
-      - openinference-instrumentation-smolagents>=0.1.16
-      - arize-phoenix>=11.30.0
       - openai>=1.109.0
       - websocket>=0.2.1
       - websocket-client>=1.8.0
-      - "smolagents @ git+https://github.com/dionizijefa/smolagents.git"
 
 
 
