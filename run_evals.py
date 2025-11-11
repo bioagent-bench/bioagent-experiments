@@ -117,7 +117,7 @@ def run_otel_module(host: str, ndjson_path: str) -> Iterator[None]:
 
 def open_environment() -> None:
     EXPERIMENT_NAME = "open-environment"
-    MODEL_NAME = "azure"
+    MODEL_NAME = "gpt-5-codex(high)"
 
     configure_logging()
     datasets = DataSet.load_all(metadata_path=METADATA_PATH, data_root=DATA_ROOT)
@@ -147,7 +147,6 @@ def open_environment() -> None:
         ):
             with temporary_mamba_environment(env_file=Path("envs/open-environment.yml")) as env_name:
                 print(f"Running task '{task.task_id}' in environment '{env_name}'.")
-                otlp_grpc_target = f"{run_config.otel_sink_host}"
                 _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
                 print(f"Completed task '{task.task_id}'.")
                 

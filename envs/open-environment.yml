@@ -13,6 +13,9 @@ dependencies:
       - openai>=1.109.0
       - websocket>=0.2.1
       - websocket-client>=1.8.0
+      - grpcio>=1.74.0
+      - opentelemetry-proto>=1.36.0
+      - googleapis-common-protos>=1.70.0
 
 
 

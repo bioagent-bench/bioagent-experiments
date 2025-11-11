@@ -44,6 +44,8 @@ class RunConfig:
     experiment_name: str
     model: str
     duration: float = 0.0
+    input_tokens: float = 0.0
+    output_tokens: float = 0.0
     eval_results: EvaluationResults | EvaluationResultsGiab | None = None
     steps: int = 0
     tools: List[Any] = field(default_factory=list, repr=False)
@@ -64,6 +66,8 @@ class RunConfig:
             "system_prompt": self.system_prompt,
             "system_prompt_name": self.system_prompt_name,
             "experiment_name": self.experiment_name,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
             "model": self.model,
             "duration": self.duration,
             "error_type": self.error_type,
@@ -98,6 +102,8 @@ class RunConfig:
             experiment_name=payload["experiment_name"],
             model=payload["model"],
             duration=payload.get("duration", 0.0),
+            input_tokens=payload.get("input_tokens", 0.0),
+            output_tokens=payload.get("output_tokens", 0.0),
             eval_results=payload.get("eval_results"),
             error_type=payload.get("error_type"),
             error_message=payload.get("error_message"),

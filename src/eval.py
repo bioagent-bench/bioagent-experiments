@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import shutil
+import socket
 import subprocess
 import time
+import urllib.error
+import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
+
+from otel import sum_token_counts
 
 from .judge_agent import (
     EvaluationResults,
@@ -148,10 +154,6 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
     Returns:
         RunConfig: Updated run configuration with evaluation results.
     """
-
-    if run_config.data_path is None:
-        raise ValueError("RunConfig.data_path must be set before running an evaluation.")
-
     inputs_root = Path(run_config.data_path)
     if not inputs_root.exists():
         raise FileNotFoundError(f"Input data directory does not exist: {inputs_root}")
@@ -191,6 +193,14 @@ def evaluate_task(run_config: RunConfig) -> RunConfig:
         end_time = time.time()
         logging.info(f"Codex execution finished at {end_time}")
         run_config.duration = (end_time - start_time) / 60 # minutes
+
+        try:
+            in_tok, out_tok = sum_token_counts(run_config.otel_sink_path)
+            run_config.input_tokens = int(in_tok)
+            run_config.output_tokens = int(out_tok)
+            logging.info(f"Aggregated tokens — input: {in_tok}, output: {out_tok}")
+        except Exception as e:
+            logging.exception(f"Failed to aggregate token counts: {e}")
 
         agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "outputs")
 

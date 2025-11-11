@@ -5,7 +5,7 @@ Accepts OTLP/gRPC logs on <host>:<port> and appends newline-delimited JSON.
 This is NOT a full collector; it's perfect for local capture/analysis.
 
 Run as a module:
-  python -m otel --host 127.0.0.1 --port 4317 --path /path/to/out.ndjson
+  python -m otel --host 127.0.0.1:4317 --path /path/to/out.ndjson
 """
 
 from __future__ import annotations
@@ -17,7 +17,8 @@ import json
 import os
 import signal
 import sys
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any, Dict, Iterable, Tuple
 
 import grpc
 from google.protobuf.json_format import MessageToDict
@@ -48,7 +49,7 @@ def _extract_quick_fields(body_dict: Dict[str, Any]) -> Dict[str, Any]:
         attrs = {
             a.get("key"): a.get("value", {}).get(list(a.get("value", {}).keys())[0])
             for a in res.get("attributes", [])
-            if "key" in a and "value" in a
+            if "key" in a and "value" in a and a.get("value")
         }
         out["service.name"] = attrs.get("service.name")
         out["env"] = attrs.get("env")
@@ -61,15 +62,150 @@ def _extract_quick_fields(body_dict: Dict[str, Any]) -> Dict[str, Any]:
                 lattrs = {
                     a.get("key"): a.get("value", {}).get(list(a.get("value", {}).keys())[0])
                     for a in lr.get("attributes", [])
-                    if "key" in a and "value" in a
+                    if "key" in a and "value" in a and a.get("value")
                 }
                 out["event.name"] = lattrs.get("event.name") or lattrs.get("event")
                 out["model"] = lattrs.get("model")
                 out["originator"] = lattrs.get("originator")
     except Exception:
+        # Best-effort — never break ingestion.
         pass
     return out
 
+
+# token aggregation
+
+def _to_int(x: Any) -> int:
+    """Coerce potential numeric strings/floats to int safely; returns 0 if not numeric."""
+    try:
+        if isinstance(x, bool):
+            return 0
+        if isinstance(x, (int,)):
+            return int(x)
+        if isinstance(x, float):
+            return int(x)
+        if isinstance(x, str):
+            # Allow things like "123", "123.0"
+            if x.strip().isdigit():
+                return int(x.strip())
+            return int(float(x.strip()))
+    except Exception:
+        return 0
+    return 0
+
+
+def _iter_log_records(envelope: Dict[str, Any]) -> Iterable[Dict[str, Any]]:
+    """Yield log_record dicts from a decoded envelope line."""
+    body = envelope.get("body") or {}
+    for r in body.get("resource_logs", []) or []:
+        for s in r.get("scope_logs", []) or []:
+            for lr in s.get("log_records", []) or []:
+                yield lr
+
+
+def _attrs_to_dict(attrs_list: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    """Flatten OTel attribute list into a simple dict."""
+    out: Dict[str, Any] = {}
+    for a in attrs_list or []:
+        key = a.get("key")
+        val_obj = a.get("value") or {}
+        # 'value' has one of: string_value, int_value, double_value, bool_value, bytes_value
+        if key and isinstance(val_obj, dict) and val_obj:
+            # grab the only value present
+            val = val_obj.get(next(iter(val_obj)))
+            out[key] = val
+    return out
+
+
+def _extract_usage_from_record(lr: Dict[str, Any]) -> Tuple[int, int]:
+    """
+    Attempt to extract (input_tokens, output_tokens) from a single log record,
+    being resilient to different key shapes:
+      - attributes: input_token_count / output_token_count
+      - attributes: input_tokens / output_tokens
+      - attributes: prompt_tokens / completion_tokens
+      - attributes: usage.prompt_tokens / usage.completion_tokens (flattened)
+      - body.kv-like payloads that contain 'usage' dicts (rare but supported)
+    """
+    in_tok = out_tok = 0
+
+    lattrs = _attrs_to_dict(lr.get("attributes", []))
+
+    flat = {str(k): lattrs[k] for k in lattrs}
+
+    candidates = [
+        ("input_token_count", "output_token_count")
+    ]
+
+    for k_in, k_out in candidates:
+        if k_in in flat or k_out in flat:
+            in_tok += _to_int(flat.get(k_in, 0))
+            out_tok += _to_int(flat.get(k_out, 0))
+
+    lr_body = lr.get("body")
+    if isinstance(lr_body, dict):
+        if "string_value" in lr_body:
+            try:
+                maybe = json.loads(lr_body.get("string_value") or "{}")
+                if isinstance(maybe, dict):
+                    usage = maybe.get("usage") or maybe.get("token_usage") or {}
+                    in_tok += _to_int(usage.get("prompt_tokens"))
+                    out_tok += _to_int(usage.get("completion_tokens"))
+                    in_tok += _to_int(maybe.get("input_token_count"))
+                    out_tok += _to_int(maybe.get("output_token_count"))
+            except Exception:
+                pass
+        elif "kvlist_value" in lr_body:
+            try:
+                kvvals = lr_body["kvlist_value"].get("values", [])
+                inner = _attrs_to_dict(kvvals)
+                usage = inner.get("usage") if isinstance(inner.get("usage"), dict) else {}
+                if isinstance(usage, dict):
+                    in_tok += _to_int(usage.get("prompt_tokens"))
+                    out_tok += _to_int(usage.get("completion_tokens"))
+                in_tok += _to_int(inner.get("input_token_count"))
+                out_tok += _to_int(inner.get("output_token_count"))
+                in_tok += _to_int(inner.get("input_tokens"))
+                out_tok += _to_int(inner.get("output_tokens"))
+            except Exception:
+                pass
+
+    return in_tok, out_tok
+
+
+def sum_token_counts(ndjson_path: str | Path) -> Tuple[int, int]:
+    """
+    Scan the NDJSON log produced by this sink and return the total
+    (input_tokens, output_tokens) observed across the conversation.
+
+    This is resilient to different key names and payload structures.
+    """
+    ndjson_path = Path(ndjson_path)
+    if not ndjson_path.exists():
+        return 0, 0
+
+    total_in = 0
+    total_out = 0
+
+    with ndjson_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                envelope = json.loads(line)
+            except Exception:
+                continue
+
+            for lr in _iter_log_records(envelope):
+                i, o = _extract_usage_from_record(lr)
+                total_in += i
+                total_out += o
+
+    return total_in, total_out
+
+
+# gRPC server
 
 class LogSinkServicer(logs_service_pb2_grpc.LogsServiceServicer):
     def __init__(self, out_path: str):
