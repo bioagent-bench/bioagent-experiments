@@ -72,9 +72,9 @@ def temporary_mamba_environment(env_file: Path) -> Iterator[str]:
         subprocess.run(remove_cmd, check=False, cwd=PROJECT_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 
-def _run_eval_subprocess(env_name: str, config_path: Path) -> None:
+def _run_agent_subprocess(env_name: str, config_path: Path) -> None:
     executable = "mamba"
-    cmd = [executable, "run", "--name", env_name, "python", "-m", "src.eval", "--config", str(config_path)]
+    cmd = [executable, "run", "--name", env_name, "python", "-m", "src.agent", "--config", str(config_path)]
     env = os.environ.copy()
     subprocess.run(cmd, check=True, cwd=PROJECT_ROOT, env=env)
 
@@ -147,7 +147,7 @@ def open_environment() -> None:
         ):
             with temporary_mamba_environment(env_file=Path("envs/open-environment.yml")) as env_name:
                 print(f"Running task '{task.task_id}' in environment '{env_name}'.")
-                _run_eval_subprocess(env_name=env_name, config_path=run_config.metadata_path)
+                _run_agent_subprocess(env_name=env_name, config_path=run_config.metadata_path)
                 print(f"Completed task '{task.task_id}'.")
                 
 

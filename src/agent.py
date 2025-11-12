@@ -1,125 +1,217 @@
-from smolagents import CodeAgent, ToolCollection
-from typing import List, Any, Optional
-from .models import (
-    create_azure_model,
-    create_llama_model,
-    create_claude_model,
-    create_gemini_model,
-)
+from __future__ import annotations
+
+import argparse
 import logging
+import os
+import shutil
+import subprocess
+import time
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Iterator
 
-logger = logging.getLogger(__name__)
-
-from phoenix.otel import register
-from openinference.instrumentation.smolagents import SmolagentsInstrumentor
-
-register()
-SmolagentsInstrumentor().instrument()
-logger.info("Phoenix telemetry initialized (agent)")
-
-
-MODEL_SETUP_FUNC = {
-    'azure': create_azure_model,
-    'llama': create_llama_model,
-    'claude': create_claude_model,
-    'gemini': create_gemini_model,
-}
+from otel import sum_token_counts
+from .logs import RunConfig, configure_logging
+from .tools import REGISTRY
 
 
-class SingleAgentWorkflow:
-    """Base class for all bioagents to reduce code duplication."""
+configure_logging()
 
-    def __init__(
-        self,
-        name: str = "bioagent",
-        max_steps: int = 30,
-        model_type: str = "llama",
-        tools: Optional[List[Any]] = None,
-        planning_interval: int = 1,
-        add_base_tools: bool = True,
-        additional_authorized_imports: Optional[List[str]] = None,
-        executor_type: str = "local",
-    ):
-        """
-        Initialize a bioagent with common configuration.
+def load_run_config(config_path: Path) -> RunConfig:
+    """Load a ``RunConfig`` instance from a metadata JSON file.
 
-        Args:
-            name: Name of the agent
-            max_steps: Maximum number of steps for the agent to run
-            model_type: Type of model to use (azure, llama, claude, gemini)
-            tools: List of tools to provide to the agent
-            planning_interval: How often to plan
-            add_base_tools: Whether to add base tools
-            additional_authorized_imports: Additional imports to authorize
-            executor_type: Type of executor to use
-        """
-        # Set up model based on model_type
-        if model_type not in MODEL_SETUP_FUNC:
-            raise ValueError(f"Unknown model type: {model_type}")
-        model_setup_func = MODEL_SETUP_FUNC[model_type]
-        model = model_setup_func()
+    Args:
+        config_path (Path): Path to the run metadata JSON file.
 
-        # Set default values
-        if additional_authorized_imports is None:
-            additional_authorized_imports = ["*"]
+    Returns:
+        RunConfig: Deserialized run configuration.
+    """
 
-        # TODO: Integrate Hydra for agent configs for experiments
-        self.agent = CodeAgent(
-            name=name,
-            max_steps=max_steps,
-            model=model,
-            tools=tools,
-            planning_interval=planning_interval,
-            add_base_tools=add_base_tools,
-            additional_authorized_imports=additional_authorized_imports,
-            executor_type=executor_type,
-        )
+    run_config = RunConfig.load_run_metadata(config_path)
 
-    def run(self, prompt: str) -> str:
-        """
-        Run the agent with the given prompt.
+    resolved_tools = REGISTRY.resolve_tools(run_config.tool_names)
 
-        Args:
-            prompt: The prompt to run the agent with
+    run_config.tools = resolved_tools
+    run_config.num_tools = len(resolved_tools)
 
-        Returns:
-            The result of running the agent
-        """
-        # Use context manager to ensure proper cleanup (e.g., Docker executor)
-        with self.agent as agent:
-            result = agent.run(prompt)
-            return result
+    return run_config
 
-    @classmethod
-    def run_with_prompt(cls, prompt: str, model_type: str = "llama", mcp_url: str = "http://0.0.0.0:8000/sse", executor_type: str = "local"):
-        """
-        Create an agent, run it with the given prompt, and print the result.
+def create_dirs(prefix: Path) -> None:
+    """Create standard output directories for an evaluation run.
 
-        This is a convenience method that handles the common pattern of:
-        1. Creating a ToolCollection from MCP server
-        2. Creating a BioAgent with the tools
-        3. Running the agent with a prompt
-        4. Printing the result
+    Args:
+        prefix (Path): Base directory for the evaluation artifacts.
 
-        Args:
-            prompt: The prompt to run the agent with
-            model_type: Type of model to use (azure, llama, claude, gemini)
-            mcp_url: URL of the MCP server
+    Returns:
+        None: This function creates directories as a side effect.
+    """
 
-        Returns:
-            The result of running the agent
-        """
-        # Fetch tools from the MCP server
-        with ToolCollection.from_mcp({"url": mcp_url}, trust_remote_code=True) as tool_collection:
-            # Create the agent
-            bioagent = cls(
-                model_type=model_type,
-                tools=tool_collection.tools,
-                executor_type=executor_type,
-            )
+    root = Path(prefix)
+    directories = (
+        root / "outputs",
+        root / "results",
+    )
 
-            result = bioagent.run(prompt)
+    for path in directories:
+        path.mkdir(parents=True, exist_ok=True)
 
-            print(result)
 
-            return result
+def glob_input_data(*input_dirs: Path) -> list[Path]:
+    """Collect all files used as input for evaluation.
+
+    Args:
+        *input_dirs (Path): Directories containing task-specific input or reference data.
+
+    Returns:
+        list[Path]: Sorted list of file paths discovered under the provided directories.
+    """
+
+    files: set[Path] = set()
+    for directory in input_dirs:
+        root = Path(directory)
+        if not root.exists():
+            continue
+        files.update(p for p in root.rglob("*") if p.is_file())
+
+    return sorted(files)
+
+
+def copy_inputs_to_run_directory(source_root: Path, destination_root: Path) -> None:
+    """Copy evaluation inputs into the run directory.
+
+    Args:
+        source_root (Path): Directory containing the task inputs.
+        destination_root (Path): Destination directory under the run path.
+
+    Returns:
+        None: This function copies files as a side effect.
+    """
+
+    destination_root.mkdir(parents=True, exist_ok=True)
+    source = Path(source_root)
+    if not source.exists():
+        return
+
+    excluded_names: set[str] = {"results"}
+
+    for item in source.iterdir():
+        if item.name in excluded_names:
+            continue
+        target = destination_root / item.name
+        if item.is_dir():
+            shutil.copytree(item, target, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, target)
+
+
+@contextmanager
+def isolated_run_environment(run_dir_path: Path, inputs_root: Path) -> Iterator[Path]:
+    """Provide an isolated working directory for agent execution.
+
+    Args:
+        run_dir_path (Path): Root directory for the current run.
+        inputs_root (Path): Source directory containing task inputs.
+
+    Yields:
+        Iterator[Path]: Path to the copied inputs directory inside the run path.
+    """
+
+    copied_inputs_root = run_dir_path / "inputs"
+    logging.info(f"Copying inputs to run directory: {copied_inputs_root}")
+    copy_inputs_to_run_directory(inputs_root, copied_inputs_root)
+
+    previous_cwd = Path.cwd()
+    os.chdir(run_dir_path)
+    try:
+        yield copied_inputs_root
+    finally:
+        os.chdir(previous_cwd)
+
+
+def run_agent_task(run_config: RunConfig) -> RunConfig:
+    """Run a single dataset evaluation using the provided configuration.
+
+    Args:
+        run_config (RunConfig): Configuration describing how to run the agent.
+
+    Returns:
+        RunConfig: Updated run configuration with evaluation results.
+    """
+    inputs_root = Path(run_config.data_path)
+    if not inputs_root.exists():
+        raise FileNotFoundError(f"Input data directory does not exist: {inputs_root}")
+
+    run_dir_path = run_config.run_dir_path
+    log_path = run_config.metadata_path
+
+    run_dir_path.mkdir(parents=True, exist_ok=True)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    create_dirs(run_dir_path)
+
+    outputs_root = run_dir_path / "outputs"
+    results_root = run_dir_path / "results"
+
+    input_data: list[Path] = []
+
+    with isolated_run_environment(run_dir_path, inputs_root) as run_inputs_root:
+        data_dir = run_inputs_root / "data"
+        reference_dir = run_inputs_root / "reference"
+
+        executor_kwargs: dict[str, Any] = {
+            "output_path": str(outputs_root),
+            "results_path": str(results_root),
+        }
+        if data_dir.exists():
+            executor_kwargs["data_path"] = str(data_dir)
+        if reference_dir.exists():
+            executor_kwargs["reference_path"] = str(reference_dir)
+
+        input_data = glob_input_data(data_dir, reference_dir)
+
+
+        prompt = run_config.system_prompt + "\n\n" + run_config.task_prompt + f"\n\nThe input data is: {input_data}"
+        start_time = time.time()
+        logging.info(f"Starting codex execution at {start_time}")
+        subprocess.run(["codex", "exec", prompt, "--skip-git-repo-check", "--yolo"])
+        end_time = time.time()
+        logging.info(f"Codex execution finished at {end_time}")
+        run_config.duration = (end_time - start_time) / 60 # minutes
+
+        try:
+            in_tok, out_tok = sum_token_counts(run_config.otel_sink_path)
+            run_config.input_tokens = int(in_tok)
+            run_config.output_tokens = int(out_tok)
+            logging.info(f"Aggregated tokens — input: {in_tok}, output: {out_tok}")
+        except Exception as e:
+            logging.exception(f"Failed to aggregate token counts: {e}")
+
+    return run_config
+
+
+def run_from_config(config_path: Path) -> RunConfig:
+    """Load a run configuration from disk and execute the evaluation."""
+
+    run_config = load_run_config(config_path)
+    return run_agent_task(run_config)
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for the evaluation script."""
+
+    parser = argparse.ArgumentParser(description="Run a single evaluation loop.")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help="Path to the serialized RunConfig JSON file.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    run_from_config(args.config)
+
+
+if __name__ == "__main__":
+    main()
