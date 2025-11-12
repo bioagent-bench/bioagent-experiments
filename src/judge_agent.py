@@ -54,43 +54,9 @@ class EvaluationResultsGiabSchema(BaseModel):
 
 
 def parse_agent_outputs(output_dir: Path) -> list[Path]:
-    """Return files and immediate subdirectories under the directory.
-
-    For each top-level directory, returns:
-    - All files directly in that directory
-    - Names of subdirectories (but not their contents)
-
-    This reduces context spam by not listing all nested files.
-
-    Args:
-        output_dir (Path): Root directory to scan.
-
-    Returns:
-        list[Path]: File paths and subdirectory names relative to ``output_dir``.
-    """
+    """Return all files and directories under output_dir (recursively), relative to output_dir."""
     root = Path(output_dir)
-    results = []
-    
-    for item in root.rglob("*"):
-        if ".snakemake" in item.parts:
-            continue
-            
-        rel_path = item.relative_to(root)
-        
-        # Include files that are at most 2 levels deep (root/dir/file)
-        # But not files deeper than that (root/dir/subdir/file)
-        if item.is_file():
-            # Count path depth: if it's root/file or root/dir/file, include it
-            # Exclude root/dir/subdir/file and deeper
-            if len(rel_path.parts) <= 2:
-                results.append(rel_path)
-        # Include directories that are immediate children of top-level dirs
-        # (root/dir/subdir) but not deeper
-        elif item.is_dir():
-            if len(rel_path.parts) == 2:
-                results.append(rel_path)
-    
-    return results
+    return [p.relative_to(root) for p in root.rglob("*")]
 
 
 def parse_agent_results(results_dir):
