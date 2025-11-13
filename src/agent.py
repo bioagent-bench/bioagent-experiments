@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import shutil
@@ -11,8 +12,8 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from otel import sum_token_counts
+from src.codex_mcp import modify_codex_config
 from .logs import RunConfig, configure_logging
-from .tools import REGISTRY
 
 
 configure_logging()
@@ -28,11 +29,7 @@ def load_run_config(config_path: Path) -> RunConfig:
     """
 
     run_config = RunConfig.load_run_metadata(config_path)
-
-    resolved_tools = REGISTRY.resolve_tools(run_config.tool_names)
-
-    run_config.tools = resolved_tools
-    run_config.num_tools = len(resolved_tools)
+    run_config.num_tools = len(run_config.tool_names)
 
     return run_config
 
@@ -167,13 +164,23 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
             executor_kwargs["reference_path"] = str(reference_dir)
 
         input_data = glob_input_data(data_dir, reference_dir)
-
-
         prompt = run_config.system_prompt + "\n\n" + run_config.task_prompt + f"\n\nThe input data is: {input_data}"
+
+        # Set the required tool size in the MCP
+        if run_config.experiment_name != "open-environment":
+            tools_json = run_config.run_dir_path / "tools.json"
+            tools_json.write_text(json.dumps(run_config.tool_names))
+            logging.info("Modifying Codex config for enabling tools")
+            modify_codex_config(
+                username="minimal-tool-environment", 
+                tools_config=tools_json
+            )
+        print(error)
         start_time = time.time()
         logging.info(f"Starting codex execution at {start_time}")
         subprocess.run(["codex", "exec", prompt, "--skip-git-repo-check", "--yolo"])
         end_time = time.time()
+
         logging.info(f"Codex execution finished at {end_time}")
         run_config.duration = (end_time - start_time) / 60 # minutes
 

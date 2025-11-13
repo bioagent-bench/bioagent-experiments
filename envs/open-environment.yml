@@ -16,6 +16,7 @@ dependencies:
       - grpcio>=1.74.0
       - opentelemetry-proto>=1.36.0
       - googleapis-common-protos>=1.70.0
+      - toml>=0.10.2
 
 
 
