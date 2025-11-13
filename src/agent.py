@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from otel import sum_token_counts
-from src.codex_mcp import modify_codex_config
+from src.codex_mcp import modify_codex_config, remove_codex_mcp_config
 from .logs import RunConfig, configure_logging
 
 
@@ -166,16 +166,19 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         input_data = glob_input_data(data_dir, reference_dir)
         prompt = run_config.system_prompt + "\n\n" + run_config.task_prompt + f"\n\nThe input data is: {input_data}"
 
-        # Set the required tool size in the MCP
-        if run_config.experiment_name != "open-environment":
+        if run_config.experiment_name == "open-environment":
+            # We shouldn't use an old MCP if we run open-environment
+            remove_codex_mcp_config()
+
+        # Set the required tools in the MCP
+        else:
             tools_json = run_config.run_dir_path / "tools.json"
             tools_json.write_text(json.dumps(run_config.tool_names))
             logging.info("Modifying Codex config for enabling tools")
             modify_codex_config(
-                username="minimal-tool-environment", 
+                username=run_config.experiment_name, 
                 tools_config=tools_json
             )
-        print(error)
         start_time = time.time()
         logging.info(f"Starting codex execution at {start_time}")
         subprocess.run(["codex", "exec", prompt, "--skip-git-repo-check", "--yolo"])

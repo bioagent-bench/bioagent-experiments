@@ -32,3 +32,20 @@ def modify_codex_config(username: str, tools_config: Path) -> None:
     mcp_servers["bioinformatics"] = mcp_block
 
     codex_path.write_text(toml.dumps(config), encoding="utf-8")
+
+
+def remove_codex_mcp_config() -> None:
+    """Remove the bioinformatics MCP block from the Codex config, if present."""
+    codex_path = Path(os.path.expanduser("~/.codex/config.toml"))
+    if not codex_path.exists():
+        return
+
+    config: dict[str, Any] = toml.load(codex_path)
+
+    mcp_servers = config.get("mcp_servers")
+    if isinstance(mcp_servers, dict) and "bioinformatics" in mcp_servers:
+        del mcp_servers["bioinformatics"]
+        if not mcp_servers:
+            config.pop("mcp_servers", None)
+
+        codex_path.write_text(toml.dumps(config), encoding="utf-8")

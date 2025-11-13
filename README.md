@@ -28,7 +28,7 @@ uv sync
 export RUN_LOGS=/home/user/run_logs/
 ```
 ```bash
-export AUZRE_OPENAI_API_KEY=""
+export AZURE_OPENAI_API_KEY=""
 ```
 
 3. Install bioinformatics-mcp package

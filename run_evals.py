@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import random
 import subprocess
 import sys
 import uuid
@@ -188,8 +189,57 @@ def minimal_tool_environmet() -> None:
                 _run_agent_subprocess(env_name=env_name, config_path=run_config.metadata_path)
                 logging.info(f"Completed task '{task.task_id}'.")
 
+
+def expanded_tool_environmet(num_extra_tools: int = 10) -> None:
+    """Models have minimal tools"""
+
+    EXPERIMENT_NAME = f"expanded-{num_extra_tools}-tool-environment"
+    MODEL_NAME = "gpt-5-codex(high)"
+
+    configure_logging()
+    datasets = DataSet.load_all(
+        metadata_path=METADATA_PATH,
+        data_root=DATA_ROOT,
+    )
+    for task in datasets:
+        if task.task_id not in tools_mapping_dict:
+            continue
+        base_tools = tools_mapping_dict[task.task_id]
+        other_tools = [
+            tool
+            for key, tools in tools_mapping_dict.items()
+            if key != task.task_id
+            for tool in tools
+            if tool not in base_tools  # avoid duplicates
+        ]
+        extra_tools = random.sample(other_tools, num_extra_tools)
+        tools_config = base_tools + extra_tools
+        run_config = _build_run_config(
+            task=task,
+            system_prompt_name='v2',
+            run_logs=RUN_LOGS,
+            experiment_name=EXPERIMENT_NAME,
+            model=MODEL_NAME,
+            tool_names=tools_config,
+        )
+
+        run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
+        run_config.otel_sink_path.parent.mkdir(parents=True, exist_ok=True)
+        run_config.save_run_metadata()
+
+        with run_otel_module(
+            host=run_config.otel_sink_host,
+            ndjson_path=str(run_config.otel_sink_path.resolve()),
+        ):
+            with temporary_mamba_environment(env_file=Path("envs/tools-environment.yml")) as env_name:
+                logging.info(f"Running task '{task.task_id}' in environment '{env_name}'.")
+                _run_agent_subprocess(env_name=env_name, config_path=run_config.metadata_path)
+                logging.info(f"Completed task '{task.task_id}'.")
+
                 
 
 if __name__ == "__main__":
     # open_environment()
     minimal_tool_environmet()
+    expanded_tool_environmet(10)
+    expanded_tool_environmet(30)
