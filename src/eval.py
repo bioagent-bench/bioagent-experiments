@@ -31,6 +31,7 @@ def run_eval(run_config: RunConfig):
             run_config.task_prompt,
             agent_output_tree,
             agent_results,
+            run_config.task_id,
         )
         completion = client.beta.chat.completions.parse(
             model="gpt-5",
@@ -43,6 +44,7 @@ def run_eval(run_config: RunConfig):
             steps_to_completion=parsed_response.steps_to_completion,
             final_results_reached=parsed_response.final_results_reached,
             f1_score=parsed_response.f1_score,
+            results_match=parsed_response.results_match,
             notes=parsed_response.notes,
         )
 
@@ -55,6 +57,7 @@ def run_eval(run_config: RunConfig):
             agent_output_tree,
             agent_results,
             truth_results,
+            run_config.task_id,
         )
         completion = client.beta.chat.completions.parse(
             model="gpt-5",
@@ -66,6 +69,7 @@ def run_eval(run_config: RunConfig):
             steps_completed=parsed_response.steps_completed,
             steps_to_completion=parsed_response.steps_to_completion,
             final_result_reached=parsed_response.final_result_reached,
+            results_match=parsed_response.results_match,
             notes=parsed_response.notes,
         )
     logging.info(f"Judge LLM finished running with results: {final_result}")

@@ -11,6 +11,7 @@ class EvaluationResults:
     steps_completed: int
     steps_to_completion: int
     final_result_reached: bool
+    results_match: bool
     notes: str
 
 @dataclass
@@ -19,6 +20,7 @@ class EvaluationResultsGiab:
     steps_to_completion: int
     final_results_reached: bool
     f1_score: int
+    results_match: bool
     notes: str
 
 class EvaluationResultsSchema(BaseModel):
@@ -28,11 +30,14 @@ class EvaluationResultsSchema(BaseModel):
         steps_completed (int): Number of steps the agent completed.
         steps_to_completion (int): Number of steps needed to reach completion.
         final_result_reached (bool): Whether the agent reached the final result.
+        results_match (bool): Whether the produced results satisfy the task
+            verification checklist.
         notes (str): Additional evaluation notes.
     """
     steps_completed: int
     steps_to_completion: int
     final_result_reached: bool
+    results_match: bool
     notes: str
 
 class EvaluationResultsGiabSchema(BaseModel):
@@ -43,20 +48,97 @@ class EvaluationResultsGiabSchema(BaseModel):
         steps_to_completion (int): Number of steps needed to reach completion.
         final_results_reached (bool): Whether the agent reached the final results.
         f1_score (int): F1 score for the evaluation.
+        results_match (bool): Whether the GIAB run cleared the acceptance
+            threshold.
         notes (str): Additional evaluation notes.
     """
     steps_completed: int
     steps_to_completion: int
     final_results_reached: bool
     f1_score: int
+    results_match: bool
     notes: str
 
 
+RESULTS_MATCH_RULES: dict[str, str] = {
+    "alzheimer-mouse": (
+        "- Task rule: mark `results_match` true only if the agent's CSV shares at least one entry "
+        "in the `Pathway` column with the truth file."
+    ),
+    "comparative-genomics": (
+        "- Task rule: set `results_match` true only when at least one `consensus_annotation` string "
+        "exactly matches between the agent output and the truth results."
+    ),
+    "cystic-fibrosis": (
+        "- Task rule: set `results_match` true only if the causal CFTR variant is reported exactly "
+        "once in the final CSV with chromosome 7, position 117227832, variant_id 7115, reference G, "
+        "alternate T, gene CFTR, gene_id ENSG00000001626, annotation stop_gained, impact HIGH, and "
+        "transcript ENST00000003084. Any missing field keeps the flag false."
+    ),
+    "deseq": (
+        "- Task rule: require at least five overlapping `gene_id` values between the agent CSV and "
+        "the truth DESeq output before returning `results_match=true`."
+    ),
+    "evolution": (
+        "- Task rule: set `results_match` true only if there is at least one variant where both "
+        "chromosome/CHROM and position/POS match the truth set."
+    ),
+    "giab": (
+        "- Task rule: set `results_match` true only if the hap.py SNP F1-score exceeds 0.7. "
+        "Otherwise it must be false."
+    ),
+    "metagenomics": (
+        "- Task rule: require that the most abundant phylum reported by the agent is "
+        "`Pseudomonadota` (consider JP4D/JC1A abundance columns) and that at least two additional "
+        "OTUs share the same `Phylum` labels as rows in the truth data. If either condition fails, "
+        "return `results_match=false`."
+    ),
+    "single-cell": (
+        "- Task rule: mark `results_match` true only if at least one `(cluster_id, "
+        "predicted_cell_type)` pair from the truth CSV is also present in the agent's output. "
+        "Cluster numbering can be permuted, but the evidence must show a real match (e.g., cluster 0 "
+        "labeled as 'Endothelial cell')."
+    ),
+    "transcript-quant": (
+        "- Task rule: set `results_match` true only when the agent's TSV contains an identical set "
+        "of `transcript_id` → `count` pairs as the truth TSV (order/formatting may differ)."
+    ),
+    "viral-metagenomics": (
+        "- Task rule: the agent must explicitly report the species 'Bottlenose dolphin adenovirus 1' "
+        "within the Viruses domain. Without that virus, `results_match` stays false."
+    ),
+}
+
+
+def _build_results_match_guidance(task_id: str) -> str:
+    """Return task-specific instructions for the results_match field."""
+    base = (
+        "\nSpecial verification flag `results_match` must always be provided as a boolean "
+        "(true/false). Mark it true only when the evidence in the provided results and truth "
+        "artifacts satisfies the applicable rule. When in doubt, default to false."
+    )
+    rule = RESULTS_MATCH_RULES.get(task_id)
+    return f"{base}\n{rule}"
+
 
 def parse_agent_outputs(output_dir: Path) -> list[Path]:
-    """Return all files and directories under output_dir (recursively), relative to output_dir."""
+    """Return all outputs relative to ``output_dir``, skipping ``.snakemake`` data.
+
+    Args:
+        output_dir (Path): Directory whose descendants should be returned.
+
+    Returns:
+        list[Path]: Relative file and directory paths found under ``output_dir``,
+            excluding anything nested inside a ``.snakemake`` directory.
+    """
     root = Path(output_dir)
-    return [p.relative_to(root) for p in root.rglob("*")]
+    outputs: list[Path] = []
+    for path in root.rglob("*"):
+        relative_path = path.relative_to(root)
+        if ".snakemake" in relative_path.parts:
+            continue
+        outputs.append(relative_path)
+    return outputs
 
 
 def parse_agent_results(results_dir):
@@ -292,8 +374,10 @@ def build_judge_prompt_csv(
     processing_tree: list[Path],
     results: str,
     truth: str,
+    task_id: str,
     ):
-    """This agent evalutes the results that are given as a CSV file."""
+    """Build the judging prompt for CSV-based tasks."""
+    results_match_guidance = _build_results_match_guidance(task_id)
     prompt = (
         "You are a strict, impartial **Bioinformatics Pipeline Judge**. Your job is to evaluate"
         "an LLM agent's work for executing a bioinformatics pipeline instructed by the prompt."
@@ -327,11 +411,13 @@ def build_judge_prompt_csv(
         "Don't count placeholders or mock completion as a completed steps"
         "For example think about p-values, logfold values, or other statistics if present"
         "To be sure that there's no mocking or hallucinated values, make sure that prior steps have been generated."
+        f"{results_match_guidance}\n"
         "The metrics for the evaluating the LLM agent we're looking for are:"
         "1. steps_completed: int - The number of steps that the agent completed."
         "2. steps_to_completion: int - The number of steps that the agent was expected to complete."
         "3. final_result_reached: bool - Whether the agent reached the final result."
         "4. notes: str - Summarize where the agent stopped if stopped and what steps are left to be done."
+        "5. results_match: bool - Set to true/false (or 1/0) per the rule above."
         "You are supposed to return the metrics as a JSON object with fields that satisifes the schema:"
         f"{EvaluationResults.__annotations__}"
 
@@ -344,8 +430,10 @@ def build_judge_prompt_giab(
     task_prompt: str,
     processing_tree: list[Path],
     results: str,
+    task_id: str,
     ):
-    """This agent evalutes the results that are given as a CSV file."""
+    """Build the judging prompt for GIAB-style tasks."""
+    results_match_guidance = _build_results_match_guidance(task_id)
     prompt = (
         "You are a strict, impartial **Bioinformatics Pipeline Judge**. Your job is to evaluate"
         "an LLM agent's work for executing a bioinformatics pipeline instructed by the prompt."
@@ -377,12 +465,14 @@ def build_judge_prompt_giab(
         "To be sure that there's no mocking or hallucinated values, make sure that prior steps have been generated."
         "This task requires calculation of recall, precision, and F1-score metrics."
         "If the agent did not calculate these metrics, the result is not considered reached."
+        f"{results_match_guidance}\n"
         "The metrics for the evaluating the LLM agent we're looking for are:"
         "1. steps_completed: int - The number of steps that the agent completed."
         "2. steps_to_completion: int - The number of steps that the agent was expected to complete."
         "3. final_result_reached: bool - Whether the agent reached the final result."
         "4. notes: str - Summarize where the agent stopped if stopped and what steps are left to be done."
         "5. f1_score: dict - The F1-score metrics for the variant calling benchmarking."
+        "6. results_match: bool - Set to true/false (or 1/0) per the rule above."
         "You are supposed to return the metrics as a JSON object with fields that satisifes the schema:"
         f"{EvaluationResultsGiab.__annotations__}"
 
