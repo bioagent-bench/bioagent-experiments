@@ -195,6 +195,8 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         except Exception as e:
             logging.exception(f"Failed to aggregate token counts: {e}")
 
+        run_config.save_run_metadata()
+
     return run_config
 
 
