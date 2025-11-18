@@ -17,6 +17,8 @@ dependencies = [
     "opentelemetry-proto>=1.36.0",
     "googleapis-common-protos>=1.70.0",
     "toml>=0.10.2",
+    "pandas>=2.3.3",
+    "seaborn>=0.13.2",
 ]
 
 [tool.uv.workspace]

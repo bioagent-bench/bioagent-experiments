@@ -47,3 +47,8 @@ mamba create --name hap hap.py
 ```bash
 python -m phoenix.server.main serve
 ```
+
+## Canonical run
+1. run_evals.py
+2. src/eval.py
+3. evaluate_run_db.py
