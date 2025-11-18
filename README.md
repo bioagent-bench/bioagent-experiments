@@ -36,6 +36,12 @@ export AZURE_OPENAI_API_KEY=""
 uv pip install -e /home/dionizije/bioinformatics-mcp 
 ```
 
+4. Install a mamba/micromamba installation to run bioinformatics-mcp from the agent
+5. Install an isolated hap.py mamba environment to run germline variant calling bnechmarking
+```bash
+mamba create --name hap hap.py
+```
+
 
 4. Run telemetry (Optional)
 ```bash

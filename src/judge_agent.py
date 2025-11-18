@@ -1,5 +1,6 @@
 import csv
 from dataclasses import dataclass
+from itertools import islice
 import subprocess
 from tarfile import data_filter
 import tempfile
@@ -141,29 +142,49 @@ def parse_agent_outputs(output_dir: Path) -> list[Path]:
     return outputs
 
 
-def parse_agent_results(results_dir):
-    """Parse results from CSV/TSV files.
+def parse_agent_results(results_dir: Path | str, max_rows: int = 100):
+    """Parse results from CSV/TSV files, returning only a leading snippet.
 
     Args:
-        results_dir: Path to a directory containing results files, or a path
-            to a single results file.
+        results_dir (Path | str): Directory containing results files or a single
+            results file path.
+        max_rows (int): Maximum number of rows to read from each table in order
+            to keep the payload concise.
 
     Returns:
-        If a single file path is provided and it has a ``.csv`` or ``.tsv``
-        suffix, returns a list of dictionaries (one per row) parsed from the
-        file. If a directory path is provided, returns a dictionary mapping
-        ``Path`` objects of all discovered ``.csv``/``.tsv`` files under the
-        directory to a list of row dictionaries for each file. If no matching
-        files are found, returns an empty list (for single-file input) or an
-        empty dict (for directory input).
+        dict: If a single file path is provided, returns a dictionary with keys
+            ``rows`` (list of dict rows), ``snippet_note`` (str), ``truncated``
+            (bool), and ``display_limit`` (int). If a directory path is
+            provided, returns a dictionary mapping each discovered ``Path`` to
+            the aforementioned metadata dictionary. If no matching files are
+            found, returns an empty dict.
     """
 
     path = Path(results_dir)
-
-    def _read_table(file_path: Path, delimiter: str):
+    def _read_table(file_path: Path, delimiter: str) -> dict:
         with file_path.open("r", encoding="utf-8", newline="") as f:
             reader = csv.DictReader(f, delimiter=delimiter)
-            return list(reader)
+            rows = list(islice(reader, max_rows))
+            truncated = next(reader, None) is not None
+
+        row_count = len(rows)
+        snippet_note = (
+            f"Showing only the first {max_rows} rows from {file_path.name} "
+            "to provide a concise snippet because the file contains additional rows."
+            if truncated
+            else (
+                f"File {file_path.name} has {row_count} rows (<= {max_rows}); "
+                "showing full contents."
+            )
+        )
+        return {
+            "path": file_path,
+            "rows": rows,
+            "snippet_note": snippet_note,
+            "truncated": truncated,
+            "display_limit": max_rows,
+            "displayed_rows": row_count,
+        }
 
     if path.is_file():
         suffix = path.suffix.lower()
@@ -171,11 +192,10 @@ def parse_agent_results(results_dir):
             return _read_table(path, ",")
         if suffix == ".tsv":
             return _read_table(path, "\t")
-        return []
+        return {}
 
-    # if path is a directory parse all CSV/TSV files recursively
     if path.is_dir():
-        results: dict[Path, list[dict]] = {}
+        results: dict[Path, dict] = {}
         for file_path in list(path.rglob("*.csv")) + list(path.rglob("*.tsv")):
             if file_path.suffix.lower() == ".csv":
                 results[file_path] = _read_table(file_path, ",")
@@ -254,50 +274,6 @@ def eval_giab_metrics(
                             f"F1-Score: {row.get('METRIC.F1_Score')}"
                         )
 
-
-def parse_agent_results(results_dir):
-    """Parse results from CSV/TSV files.
-
-    Args:
-        results_dir: Path to a directory containing results files, or a path
-            to a single results file.
-
-    Returns:
-        If a single file path is provided and it has a ``.csv`` or ``.tsv``
-        suffix, returns a list of dictionaries (one per row) parsed from the
-        file. If a directory path is provided, returns a dictionary mapping
-        ``Path`` objects of all discovered ``.csv``/``.tsv`` files under the
-        directory to a list of row dictionaries for each file. If no matching
-        files are found, returns an empty list (for single-file input) or an
-        empty dict (for directory input).
-    """
-
-    path = Path(results_dir)
-
-    def _read_table(file_path: Path, delimiter: str):
-        with file_path.open("r", encoding="utf-8", newline="") as f:
-            reader = csv.DictReader(f, delimiter=delimiter)
-            return list(reader)
-
-    if path.is_file():
-        suffix = path.suffix.lower()
-        if suffix == ".csv":
-            return _read_table(path, ",")
-        if suffix == ".tsv":
-            return _read_table(path, "\t")
-        return []
-
-    # if path is a directory parse all CSV/TSV files recursively
-    if path.is_dir():
-        results: dict[Path, list[dict]] = {}
-        for file_path in list(path.rglob("*.csv")) + list(path.rglob("*.tsv")):
-            if file_path.suffix.lower() == ".csv":
-                results[file_path] = _read_table(file_path, ",")
-            elif file_path.suffix.lower() == ".tsv":
-                results[file_path] = _read_table(file_path, "\t")
-        return results
-
-    return {}
 
 def eval_giab_metrics(
     agent_results_dir: Path,
