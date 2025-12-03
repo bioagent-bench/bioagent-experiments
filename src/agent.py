@@ -172,7 +172,7 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
 
         prompt = run_config.system_prompt + "\n\n" + run_config.task_prompt + f"\n\nThe input data is: {input_data}"
 
-        if run_config.experiment_name == "open-environment":
+        if run_config.experiment_name.startswith("open-environment"):
             # we shouldn't use an old MCP if we run open-environment
             remove_codex_mcp_config()
 
