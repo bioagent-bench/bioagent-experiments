@@ -181,7 +181,7 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
             )
         start_time = time.time()
         logging.info(f"Starting codex execution at {start_time}")
-        subprocess.run(["codex", "exec", prompt, "--skip-git-repo-check", "--yolo"])
+        subprocess.run(["codex", "--profile", run_config.model, "exec", prompt, "--skip-git-repo-check", "--yolo"])
         end_time = time.time()
 
         logging.info(f"Codex execution finished at {end_time}")
@@ -196,6 +196,12 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
             logging.exception(f"Failed to aggregate token counts: {e}")
 
         run_config.save_run_metadata()
+
+        # Clean up input data after execution completes
+        inputs_folder = run_dir_path / "inputs"
+        if inputs_folder.exists():
+            logging.info(f"Deleting inputs folder: {inputs_folder}")
+            shutil.rmtree(inputs_folder)
 
     return run_config
 

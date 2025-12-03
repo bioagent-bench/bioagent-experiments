@@ -116,9 +116,8 @@ def run_otel_module(host: str, ndjson_path: str) -> Iterator[None]:
                 pass
 
 
-def open_environment() -> None:
+def open_environment(model_name) -> None:
     EXPERIMENT_NAME = "open-environment"
-    MODEL_NAME = "gpt-5-codex(high)"
 
     configure_logging()
     datasets = DataSet.load_all(metadata_path=METADATA_PATH, data_root=DATA_ROOT)
@@ -129,7 +128,7 @@ def open_environment() -> None:
             system_prompt_name="v1",
             run_logs=RUN_LOGS,
             experiment_name=EXPERIMENT_NAME,
-            model=MODEL_NAME,
+            model=model_name,
             tool_names=(),
         )
 
@@ -239,7 +238,11 @@ def expanded_tool_environmet(num_extra_tools: int = 10) -> None:
                 
 
 if __name__ == "__main__":
-    # open_environment()
-    minimal_tool_environmet()
-    expanded_tool_environmet(10)
-    expanded_tool_environmet(30)
+    for model in [
+        "gpt-5-1-codex",
+        "mistral-large-3",
+        "deepseek-v3-0324",
+        "gpt-5.1",
+        "gpt-oss-120b",
+    ]:
+        open_environment(model)
