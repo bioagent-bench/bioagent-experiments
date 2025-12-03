@@ -26,6 +26,7 @@ DATA_ROOT = Path("/home/dionizije/bioagent-data")
 def _build_run_config(
     task: DataSet,
     system_prompt_name: str,
+    use_reference_data: bool,
     run_logs: Path,
     experiment_name: str,
     model: str,
@@ -43,6 +44,7 @@ def _build_run_config(
     return RunConfig(
         metadata_path=metadata_path,
         run_hash=run_hash,
+        use_reference_data=use_reference_data,
         timestamp=timestamp,
         task_id=task.task_id,
         task_prompt=task.task_prompt,
@@ -116,8 +118,12 @@ def run_otel_module(host: str, ndjson_path: str) -> Iterator[None]:
                 pass
 
 
-def open_environment(model_name) -> None:
-    EXPERIMENT_NAME = "open-environment"
+def open_environment(model_name, use_reference_data: bool = False) -> None:
+
+    if use_reference_data:
+        EXPERIMENT_NAME = "open-environment-with-reference-data"
+    else:
+        EXPERIMENT_NAME = "open-environment-no-reference-data"
 
     configure_logging()
     datasets = DataSet.load_all(metadata_path=METADATA_PATH, data_root=DATA_ROOT)
@@ -126,6 +132,7 @@ def open_environment(model_name) -> None:
         run_config = _build_run_config(
             task=task,
             system_prompt_name="v1",
+            use_reference_data=use_reference_data,
             run_logs=RUN_LOGS,
             experiment_name=EXPERIMENT_NAME,
             model=model_name,
@@ -238,11 +245,8 @@ def expanded_tool_environmet(num_extra_tools: int = 10) -> None:
                 
 
 if __name__ == "__main__":
-    for model in [
-        "gpt-5-1-codex",
-        "mistral-large-3",
-        "deepseek-v3-0324",
-        "gpt-5.1",
-        "gpt-oss-120b",
-    ]:
-        open_environment(model)
+    from src.models import MODELS
+
+    for model in MODELS:
+        open_environment(model, use_reference_data=True)
+        open_environment(model, use_reference_data=False)

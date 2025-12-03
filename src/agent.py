@@ -73,7 +73,11 @@ def glob_input_data(*input_dirs: Path) -> list[Path]:
     return sorted(files)
 
 
-def copy_inputs_to_run_directory(source_root: Path, destination_root: Path) -> None:
+def copy_inputs_to_run_directory(
+    source_root: Path, 
+    destination_root: Path, 
+    use_reference_data: bool,
+    ) -> None:
     """Copy evaluation inputs into the run directory.
 
     Args:
@@ -91,6 +95,10 @@ def copy_inputs_to_run_directory(source_root: Path, destination_root: Path) -> N
 
     excluded_names: set[str] = {"results"}
 
+    # If we don't use reference data, we exclude the reference directory
+    if not use_reference_data:
+        excluded_names.add("reference")
+
     for item in source.iterdir():
         if item.name in excluded_names:
             continue
@@ -102,7 +110,7 @@ def copy_inputs_to_run_directory(source_root: Path, destination_root: Path) -> N
 
 
 @contextmanager
-def isolated_run_environment(run_dir_path: Path, inputs_root: Path) -> Iterator[Path]:
+def isolated_run_environment(run_dir_path: Path, inputs_root: Path, use_reference_data: bool) -> Iterator[Path]:
     """Provide an isolated working directory for agent execution.
 
     Args:
@@ -115,7 +123,7 @@ def isolated_run_environment(run_dir_path: Path, inputs_root: Path) -> Iterator[
 
     copied_inputs_root = run_dir_path / "inputs"
     logging.info(f"Copying inputs to run directory: {copied_inputs_root}")
-    copy_inputs_to_run_directory(inputs_root, copied_inputs_root)
+    copy_inputs_to_run_directory(inputs_root, copied_inputs_root, use_reference_data)
 
     previous_cwd = Path.cwd()
     os.chdir(run_dir_path)
@@ -150,27 +158,25 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
 
     input_data: list[Path] = []
 
-    with isolated_run_environment(run_dir_path, inputs_root) as run_inputs_root:
+    # create an isolated run environment
+    # use_reference data controls wether we include ref data or not
+    with isolated_run_environment(run_dir_path, inputs_root, run_config.use_reference_data) as run_inputs_root:
         data_dir = run_inputs_root / "data"
         reference_dir = run_inputs_root / "reference"
 
-        executor_kwargs: dict[str, Any] = {
-            "output_path": str(outputs_root),
-            "results_path": str(results_root),
-        }
-        if data_dir.exists():
-            executor_kwargs["data_path"] = str(data_dir)
-        if reference_dir.exists():
-            executor_kwargs["reference_path"] = str(reference_dir)
 
-        input_data = glob_input_data(data_dir, reference_dir)
+        if run_config.use_reference_data:
+            input_data = glob_input_data(data_dir, reference_dir)
+        else:
+            input_data = glob_input_data(data_dir)
+
         prompt = run_config.system_prompt + "\n\n" + run_config.task_prompt + f"\n\nThe input data is: {input_data}"
 
         if run_config.experiment_name == "open-environment":
-            # We shouldn't use an old MCP if we run open-environment
+            # we shouldn't use an old MCP if we run open-environment
             remove_codex_mcp_config()
 
-        # Set the required tools in the MCP
+        # set the required tools in the MCP
         else:
             tools_json = run_config.run_dir_path / "tools.json"
             tools_json.write_text(json.dumps(run_config.tool_names))
@@ -197,7 +203,7 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
 
         run_config.save_run_metadata()
 
-        # Clean up input data after execution completes
+        # clean up input data after execution completes
         inputs_folder = run_dir_path / "inputs"
         if inputs_folder.exists():
             logging.info(f"Deleting inputs folder: {inputs_folder}")

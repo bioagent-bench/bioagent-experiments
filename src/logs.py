@@ -31,6 +31,7 @@ def _serialize_eval_results(results: EvaluationResults | EvaluationResultsGiab |
 class RunConfig:
     run_hash: str
     metadata_path: Path
+    use_reference_data: bool
     timestamp: datetime
     run_dir_path: Path
     data_path: Path
@@ -57,6 +58,7 @@ class RunConfig:
         metadata = {
             "run_hash": self.run_hash,
             "metadata_path": str(self.metadata_path),
+            "use_reference_data": self.use_reference_data,
             "timestamp": self.timestamp.isoformat(),
             "task_id": self.task_id,
             "task_prompt": self.task_prompt,
@@ -92,6 +94,7 @@ class RunConfig:
         return cls(
             run_hash=payload["run_hash"],
             metadata_path=file_path,
+            use_reference_data=payload.get("use_reference_data", False),
             timestamp=datetime.fromisoformat(timestamp_raw),
             task_id=payload["task_id"],
             task_prompt=payload["task_prompt"],
