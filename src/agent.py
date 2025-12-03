@@ -187,7 +187,13 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
             )
         start_time = time.time()
         logging.info(f"Starting codex execution at {start_time}")
-        subprocess.run(["codex", "--profile", run_config.model, "exec", prompt, "--skip-git-repo-check", "--yolo"])
+        subprocess.run([
+            "codex", 
+            "exec", prompt, 
+            "--profile", run_config.model, 
+            "--skip-git-repo-check", 
+            "--yolo"
+        ])
         end_time = time.time()
 
         logging.info(f"Codex execution finished at {end_time}")
