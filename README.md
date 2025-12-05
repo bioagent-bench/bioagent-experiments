@@ -29,6 +29,7 @@ export RUN_LOGS=/home/user/run_logs/
 ```
 ```bash
 export AZURE_OPENAI_API_KEY=""
+export ANTHROPIC_FOUNDRY_API_KEY=""
 ```
 
 3. Install bioinformatics-mcp package

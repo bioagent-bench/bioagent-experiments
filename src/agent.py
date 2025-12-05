@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from otel import sum_token_counts
-from src.codex_mcp import modify_codex_config, remove_codex_mcp_config
+from src.mcp_configs import modify_codex_config, remove_codex_mcp_config
 from .logs import RunConfig, configure_logging
 
 
 configure_logging()
+
 
 def load_run_config(config_path: Path) -> RunConfig:
     """Load a ``RunConfig`` instance from a metadata JSON file.
@@ -32,6 +33,7 @@ def load_run_config(config_path: Path) -> RunConfig:
     run_config.num_tools = len(run_config.tool_names)
 
     return run_config
+
 
 def create_dirs(prefix: Path) -> None:
     """Create standard output directories for an evaluation run.
@@ -74,10 +76,10 @@ def glob_input_data(*input_dirs: Path) -> list[Path]:
 
 
 def copy_inputs_to_run_directory(
-    source_root: Path, 
-    destination_root: Path, 
+    source_root: Path,
+    destination_root: Path,
     use_reference_data: bool,
-    ) -> None:
+) -> None:
     """Copy evaluation inputs into the run directory.
 
     Args:
@@ -110,7 +112,9 @@ def copy_inputs_to_run_directory(
 
 
 @contextmanager
-def isolated_run_environment(run_dir_path: Path, inputs_root: Path, use_reference_data: bool) -> Iterator[Path]:
+def isolated_run_environment(
+    run_dir_path: Path, inputs_root: Path, use_reference_data: bool
+) -> Iterator[Path]:
     """Provide an isolated working directory for agent execution.
 
     Args:
@@ -160,17 +164,23 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
 
     # create an isolated run environment
     # use_reference data controls wether we include ref data or not
-    with isolated_run_environment(run_dir_path, inputs_root, run_config.use_reference_data) as run_inputs_root:
+    with isolated_run_environment(
+        run_dir_path, inputs_root, run_config.use_reference_data
+    ) as run_inputs_root:
         data_dir = run_inputs_root / "data"
         reference_dir = run_inputs_root / "reference"
-
 
         if run_config.use_reference_data:
             input_data = glob_input_data(data_dir, reference_dir)
         else:
             input_data = glob_input_data(data_dir)
 
-        prompt = run_config.system_prompt + "\n\n" + run_config.task_prompt + f"\n\nThe input data is: {input_data}"
+        prompt = (
+            run_config.system_prompt
+            + "\n\n"
+            + run_config.task_prompt
+            + f"\n\nThe input data is: {input_data}"
+        )
 
         if run_config.experiment_name.startswith("open-environment"):
             # we shouldn't use an old MCP if we run open-environment
@@ -182,22 +192,37 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
             tools_json.write_text(json.dumps(run_config.tool_names))
             logging.info("Modifying Codex config for enabling tools")
             modify_codex_config(
-                username=run_config.experiment_name, 
-                tools_config=tools_json
+                username=run_config.experiment_name, tools_config=tools_json
             )
         start_time = time.time()
         logging.info(f"Starting codex execution at {start_time}")
-        subprocess.run([
-            "codex", 
-            "exec", prompt, 
-            "--profile", run_config.model, 
-            "--skip-git-repo-check", 
-            "--yolo"
-        ])
+        if run_config.model in ("claude-opus-4-5", "claude-sonnet-4-5"):
+            subprocess.run(
+                [
+                    "claude",
+                    "-p",
+                    prompt,
+                    "--model",
+                    run_config.model,
+                    "--dangerously-skip-permissions",
+                ]
+            )
+        else:
+            subprocess.run(
+                [
+                    "codex",
+                    "exec",
+                    prompt,
+                    "--profile",
+                    run_config.model,
+                    "--skip-git-repo-check",
+                    "--yolo",
+                ]
+            )
         end_time = time.time()
 
         logging.info(f"Codex execution finished at {end_time}")
-        run_config.duration = (end_time - start_time) / 60 # minutes
+        run_config.duration = (end_time - start_time) / 60  # minutes
 
         try:
             in_tok, out_tok = sum_token_counts(run_config.otel_sink_path)
