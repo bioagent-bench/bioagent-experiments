@@ -166,61 +166,31 @@ def _execute_tasks_in_env(
 
     worker_count = max(1, min(max_workers, len(task_list)))
 
-    with ThreadPoolExecutor(max_workers=worker_count) as executor:
-        active: dict = {}
-        tasks_iter = iter(task_list)
-
-        def _submit_next_task() -> bool:
-            try:
-                task = next(tasks_iter)
-            except StopIteration:
-                return False
-            run_config = build_run_config(task)
-            _prepare_run_config(run_config)
-            env_ctx = temporary_mamba_environment(env_file=env_file, env_name=task.task_id)
-            try:
-                env_name = env_ctx.__enter__()
-            except Exception:
-                env_ctx.__exit__(None, None, None)
-                raise
-            otel_ctx = run_otel_module(
-                host=run_config.otel_sink_host,
-                ndjson_path=str(run_config.otel_sink_path.resolve()),
-            )
+    def _run_task(task: DataSet) -> None:
+        run_config = build_run_config(task)
+        _prepare_run_config(run_config)
+        env_alias = f"{task.task_id}-{run_config.run_hash[:8]}"
+        with temporary_mamba_environment(env_file=env_file, env_name=env_alias) as env_name:
             logging.info(
                 "Starting OTEL sink for task '%s' (run %s) on %s",
-                task.task_id,
+                run_config.task_id,
                 run_config.run_hash,
                 run_config.otel_sink_host,
             )
-            otel_ctx.__enter__()
-            future = executor.submit(_run_single_task, env_name, run_config)
-            active[future] = (run_config, otel_ctx, env_ctx)
-            return True
+            with run_otel_module(
+                host=run_config.otel_sink_host,
+                ndjson_path=str(run_config.otel_sink_path.resolve()),
+            ):
+                _run_single_task(env_name, run_config)
 
-        for _ in range(worker_count):
-            if not _submit_next_task():
-                break
-
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = [executor.submit(_run_task, task) for task in task_list]
         try:
-            while active:
-                future = next(as_completed(list(active.keys())))
-                run_config, otel_ctx, env_ctx = active.pop(future)
-                try:
-                    future.result()
-                finally:
-                    try:
-                        otel_ctx.__exit__(None, None, None)
-                    finally:
-                        env_ctx.__exit__(None, None, None)
-                _submit_next_task()
+            for future in as_completed(futures):
+                future.result()
         except Exception:
-            for future, (_, otel_ctx, env_ctx) in active.items():
+            for future in futures:
                 future.cancel()
-                try:
-                    otel_ctx.__exit__(None, None, None)
-                finally:
-                    env_ctx.__exit__(None, None, None)
             raise
 
 
