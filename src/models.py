@@ -4,6 +4,6 @@ MODELS = [
     "deepseek-v3-0324",
     "gpt-5-1",
     "gpt-oss-120b",
-    "sonnet",  # stands for 4.5
-    "opus",  # stands for 4.5
+    "claude-opus-4-5",
+    "claude-sonnet-4-5", 
 ]

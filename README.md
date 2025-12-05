@@ -44,12 +44,13 @@ mamba create --name hap hap.py
 ```
 
 
-4. Run telemetry (Optional)
-```bash
-python -m phoenix.server.main serve
-```
-
 ## Canonical run
 1. run_evals.py
 2. src/eval.py
 3. evaluate_run_db.py
+
+## Run tests for models
+You can run this before running experiments to check if model connections work
+```bash
+python test_coding_framework_configs.py 
+```

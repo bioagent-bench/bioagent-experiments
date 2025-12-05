@@ -41,16 +41,14 @@ def test_codex_command(model: str) -> Tuple[bool, int, str, str]:
     """
 
     if model == "claude-opus-4-5" or model == "claude-sonnet-4-5":
-        subprocess.run(
-            [
-                "claude",
-                "-p",
-                "Hello",
-                "--model",
-                model,
-                "--dangerously-skip-permissions",
-            ]
-        )
+        command = [
+            "claude",
+            "-p",
+            "Hello",
+            "--model",
+            model,
+            "--dangerously-skip-permissions",
+        ]
     else:
         command = [
             "codex",
@@ -61,13 +59,12 @@ def test_codex_command(model: str) -> Tuple[bool, int, str, str]:
             "--skip-git-repo-check",
             "--yolo",
         ]
-
     try:
         result = subprocess.run(
             command,
             capture_output=True,
             text=True,
-            check=False,  # Don't raise exception on non-zero exit
+            check=False,
         )
 
         success = result.returncode == 0
