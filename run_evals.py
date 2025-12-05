@@ -75,11 +75,12 @@ def _build_run_config(
     )
 
 
-def _allocate_otel_endpoint(host: str = "127.0.0.1") -> str:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind((host, 0))
-        _, port = sock.getsockname()
-    return f"{host}:{port}"
+def _resolve_otel_host() -> str:
+    """Return the OTEL endpoint host:port string shared across all runs."""
+    override = os.getenv("RUN_EVALS_OTEL_HOST") or os.getenv("RUN_EVALS_OTEL_ENDPOINT")
+    if override:
+        return override.replace("http://", "").replace("https://", "")
+    return "127.0.0.1:4317"
 
 
 def _prepare_run_config(run_config: RunConfig) -> None:
@@ -288,7 +289,7 @@ def run_environment(
         logging.info("No tasks matched the '%s' suite.", suite)
         return
 
-    otel_host = _allocate_otel_endpoint()
+    otel_host = _resolve_otel_host()
     otel_root = RUN_LOGS / "otel"
     otel_root.mkdir(parents=True, exist_ok=True)
 
@@ -303,7 +304,6 @@ def run_environment(
             tool_names=_tool_names(task),
             otel_sink_host=otel_host,
         )
-
     logging.info("Starting shared OTEL sink on %s.", otel_host)
     with run_otel_module(
         host=otel_host,
