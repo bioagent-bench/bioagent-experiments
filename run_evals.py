@@ -250,108 +250,83 @@ def run_otel_module(host: str, ndjson_path: str) -> Iterator[None]:
                 pass
 
 
-def open_environment(
-    model_name, use_reference_data: bool = False, max_workers: int = 1
+def run_environment(
+    suite: str,
+    model_name: str,
+    use_reference_data: bool = False,
+    max_workers: int = 1,
+    num_extra_tools: int = 10,
 ) -> None:
-    experiment_name = (
-        "open-environment-with-reference-data"
-        if use_reference_data
-        else "open-environment-no-reference-data"
-    )
+    """
+    Execute evaluation suite in a mamba environment. `suite` accepts
+    "open", "minimal", or "expanded".
+    """
 
     configure_logging()
     datasets = DataSet.load_all(metadata_path=METADATA_PATH, data_root=DATA_ROOT)
+    suite = suite.lower()
+
+    if suite == "open":
+        experiment_name = (
+            "open-environment-with-reference-data"
+            if use_reference_data
+            else "open-environment-no-reference-data"
+        )
+        env_file = Path("envs/open-environment.yml")
+        relevant_tasks = datasets
+        system_prompt_name = "v1"
+
+        def _tool_names(_: DataSet) -> Sequence[str]:
+            return ()
+
+        suite_use_reference = use_reference_data
+    elif suite == "minimal":
+        experiment_name = "minimal-tool-environment"
+        env_file = Path("envs/tools-environment.yml")
+        relevant_tasks = [task for task in datasets if task.task_id in tools_mapping_dict]
+        system_prompt_name = "v2"
+
+        def _tool_names(task: DataSet) -> Sequence[str]:
+            return tuple(tools_mapping_dict[task.task_id])
+
+        suite_use_reference = False
+    elif suite == "expanded":
+        experiment_name = f"expanded-{num_extra_tools}-tool-environment"
+        env_file = Path("envs/tools-environment.yml")
+        relevant_tasks = [task for task in datasets if task.task_id in tools_mapping_dict]
+        system_prompt_name = "v2"
+
+        def _tool_names(task: DataSet) -> Sequence[str]:
+            base_tools = tools_mapping_dict[task.task_id]
+            other_tools = [
+                tool
+                for key, tools in tools_mapping_dict.items()
+                if key != task.task_id
+                for tool in tools
+                if tool not in base_tools
+            ]
+            extra_tools = random.sample(other_tools, num_extra_tools)
+            return tuple(base_tools + extra_tools)
+
+        suite_use_reference = False
+    else:
+        raise ValueError(f"Unknown suite '{suite}'")
 
     def _build(task: DataSet) -> RunConfig:
         return _build_run_config(
             task=task,
-            system_prompt_name="v1",
-            use_reference_data=use_reference_data,
+            system_prompt_name=system_prompt_name,
+            use_reference_data=suite_use_reference,
             run_logs=RUN_LOGS,
             experiment_name=experiment_name,
             model=model_name,
-            tool_names=(),
-            otel_sink_host=_allocate_otel_endpoint(),
-        )
-
-    _execute_tasks_in_env(
-        tasks=datasets,
-        env_file=Path("envs/open-environment.yml"),
-        max_workers=max_workers,
-        build_run_config=_build,
-    )
-
-
-def minimal_tool_environmet(max_workers: int = 1) -> None:
-    """Models have minimal tools"""
-
-    EXPERIMENT_NAME = "minimal-tool-environment"
-    MODEL_NAME = "gpt-5-codex(high)"
-
-    configure_logging()
-    datasets = DataSet.load_all(
-        metadata_path=METADATA_PATH,
-        data_root=DATA_ROOT,
-    )
-    relevant_tasks = [task for task in datasets if task.task_id in tools_mapping_dict]
-
-    def _build(task: DataSet) -> RunConfig:
-        tools_config = tools_mapping_dict[task.task_id]
-        return _build_run_config(
-            task=task,
-            system_prompt_name="v2",
-            run_logs=RUN_LOGS,
-            experiment_name=EXPERIMENT_NAME,
-            model=MODEL_NAME,
-            tool_names=tools_config,
+            tool_names=_tool_names(task),
             otel_sink_host=_allocate_otel_endpoint(),
         )
 
     _execute_tasks_in_env(
         tasks=relevant_tasks,
-        env_file=Path("envs/tools-environment.yml"),
-        max_workers=max_workers,
-        build_run_config=_build,
-    )
-
-
-def expanded_tool_environmet(num_extra_tools: int = 10, max_workers: int = 1) -> None:
-    """Models have minimal tools"""
-
-    EXPERIMENT_NAME = f"expanded-{num_extra_tools}-tool-environment"
-    MODEL_NAME = "gpt-5-codex(high)"
-
-    configure_logging()
-    datasets = DataSet.load_all(
-        metadata_path=METADATA_PATH,
-        data_root=DATA_ROOT,
-    )
-    relevant_tasks = [task for task in datasets if task.task_id in tools_mapping_dict]
-
-    def _build(task: DataSet) -> RunConfig:
-        base_tools = tools_mapping_dict[task.task_id]
-        other_tools = [
-            tool
-            for key, tools in tools_mapping_dict.items()
-            if key != task.task_id
-            for tool in tools
-            if tool not in base_tools
-        ]
-        extra_tools = random.sample(other_tools, num_extra_tools)
-        tools_config = base_tools + extra_tools
-        return _build_run_config(
-            task=task,
-            system_prompt_name="v2",
-            run_logs=RUN_LOGS,
-            experiment_name=EXPERIMENT_NAME,
-            model=MODEL_NAME,
-            tool_names=tools_config,
-            otel_sink_host=_allocate_otel_endpoint(),
-        )
-
-    _execute_tasks_in_env(
-        tasks=relevant_tasks,
-        env_file=Path("envs/tools-environment.yml"),
+        env_file=env_file,
         max_workers=max_workers,
         build_run_config=_build,
     )
@@ -411,18 +386,29 @@ def main(
             reference_modes.append(False)
         for model in selected_models:
             for use_reference in reference_modes or [False]:
-                open_environment(
+                run_environment(
+                    suite="open",
                     model_name=model,
                     use_reference_data=use_reference,
                     max_workers=max_workers,
+                    num_extra_tools=num_extra_tools,
                 )
     elif suite == "minimal":
-        minimal_tool_environmet(max_workers=max_workers)
+        for model in selected_models:
+            run_environment(
+                suite="minimal",
+                model_name=model,
+                max_workers=max_workers,
+                num_extra_tools=num_extra_tools,
+            )
     elif suite == "expanded":
-        expanded_tool_environmet(
-            num_extra_tools=num_extra_tools,
-            max_workers=max_workers,
-        )
+        for model in selected_models:
+            run_environment(
+                suite="expanded",
+                model_name=model,
+                max_workers=max_workers,
+                num_extra_tools=num_extra_tools,
+            )
 
 
 if __name__ == "__main__":
