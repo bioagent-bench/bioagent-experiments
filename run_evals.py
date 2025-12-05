@@ -75,6 +75,7 @@ def _build_run_config(
         otel_sink_path=otel_path,
     )
 
+
 def _prepare_run_config(run_config: RunConfig) -> None:
     run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
     run_config.otel_sink_path.parent.mkdir(parents=True, exist_ok=True)
@@ -151,11 +152,11 @@ def _execute_tasks_in_env(
     env_file: Path,
     max_workers: int,
     build_run_config: Callable[[DataSet], RunConfig],
-) -> None:
+) -> int:
     task_list = list(tasks)
     if not task_list:
         logging.info("No tasks to run for environment file '%s'.", env_file)
-        return
+        return 0
 
     worker_count = max(1, min(max_workers, len(task_list)))
 
@@ -163,22 +164,29 @@ def _execute_tasks_in_env(
         run_config = build_run_config(task)
         _prepare_run_config(run_config)
         env_alias = f"{task.task_id}-{run_config.run_hash[:8]}"
-        with temporary_mamba_environment(env_file=env_file, env_name=env_alias) as env_name:
+        with temporary_mamba_environment(
+            env_file=env_file, env_name=env_alias
+        ) as env_name:
             _run_single_task(env_name, run_config)
 
+    completed = 0
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = [executor.submit(_run_task, task) for task in task_list]
         try:
             for future in as_completed(futures):
                 future.result()
+                completed += 1
         except Exception:
             for future in futures:
                 future.cancel()
             raise
+    return completed
 
 
 @contextmanager
-def run_otel_module(host: str, ndjson_path: str, mode: str = "single") -> Iterator[None]:
+def run_otel_module(
+    host: str, ndjson_path: str, mode: str = "single"
+) -> Iterator[None]:
     """
     Launch the OTEL sink as a separate Python module process:
       python -m otel --host ... --path ...
@@ -227,7 +235,6 @@ def run_environment(
     "open", "minimal", or "expanded".
     """
 
-    configure_logging()
     datasets = DataSet.load_all(metadata_path=METADATA_PATH, data_root=DATA_ROOT)
     suite = suite.lower()
 
@@ -243,12 +250,15 @@ def run_environment(
 
         def _tool_names(_: DataSet) -> Sequence[str]:
             return ()
+
         suite_use_reference = use_reference_data
 
     elif suite == "minimal":
         experiment_name = "minimal-tool-environment"
         env_file = Path("envs/tools-environment.yml")
-        relevant_tasks = [task for task in datasets if task.task_id in tools_mapping_dict]
+        relevant_tasks = [
+            task for task in datasets if task.task_id in tools_mapping_dict
+        ]
         system_prompt_name = "v2"
 
         def _tool_names(task: DataSet) -> Sequence[str]:
@@ -259,8 +269,11 @@ def run_environment(
     elif suite == "expanded":
         experiment_name = f"expanded-{num_extra_tools}-tool-environment"
         env_file = Path("envs/tools-environment.yml")
-        relevant_tasks = [task for task in datasets if task.task_id in tools_mapping_dict]
+        relevant_tasks = [
+            task for task in datasets if task.task_id in tools_mapping_dict
+        ]
         system_prompt_name = "v2"
+
         def _tool_names(task: DataSet) -> Sequence[str]:
             base_tools = tools_mapping_dict[task.task_id]
             other_tools = [
@@ -283,6 +296,7 @@ def run_environment(
 
     otel_root = RUN_LOGS / "otel"
     otel_root.mkdir(parents=True, exist_ok=True)
+    total_tasks = len(relevant_tasks)
 
     def _build(task: DataSet) -> RunConfig:
         return _build_run_config(
@@ -294,18 +308,22 @@ def run_environment(
             model=model_name,
             tool_names=_tool_names(task),
         )
+
     logging.info("Starting shared OTEL sink on %s.", OTEL_SINK_HOST)
     with run_otel_module(
         host=OTEL_SINK_HOST,
         ndjson_path=str(otel_root.resolve()),
         mode="multi",
     ):
-        _execute_tasks_in_env(
+        completed = _execute_tasks_in_env(
             tasks=relevant_tasks,
             env_file=env_file,
             max_workers=max_workers,
             build_run_config=_build,
         )
+    click.echo(
+        f"Completed {completed}/{total_tasks} tasks for suite '{suite}' with model '{model_name}'."
+    )
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -340,12 +358,12 @@ def main(
     models: tuple[str, ...],
 ) -> None:
     _ensure_required_env_vars()
-    
+
     suite = suite.lower()
     reference_mode = reference_mode.lower()
-    
+
     selected_models = list(models) if models else MODELS
-    
+
     use_reference = False
     if reference_mode == "with":
         use_reference = True
