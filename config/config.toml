@@ -37,3 +37,9 @@ name = "Azure OpenAI"
 base_url = ADD_AZURE_URL_HERE # AZURE URL GOES HERE
 env_key = "AZURE_OPENAI_API_KEY"
 stream_idle_timeout_ms = 259200000
+
+# Send CLI telemetry to the mini-otel sink run_evals.py starts locally.
+[otel]
+environment = "staging"
+log_user_prompt = false
+exporter = { otlp-grpc = { endpoint = "http://127.0.0.1:4317" } }

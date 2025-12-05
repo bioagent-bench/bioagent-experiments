@@ -1,8 +1,14 @@
 {
     "env": {
         "CLAUDE_CODE_USE_FOUNDRY": "1",
+        "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
         "ANTHROPIC_FOUNDRY_RESOURCE": "YOUR_RESOURCE_NAME",
         "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-5",
-        "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-5"
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-5",
+        "OTEL_METRICS_EXPORTER": "otlp",
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4317",
+        "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Bearer dionizije"
     }
 }
