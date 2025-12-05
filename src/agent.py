@@ -197,7 +197,8 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
             input_data = glob_input_data(data_dir)
 
         system_prompt_template = prompts.get(run_config.system_prompt_name)
-        system_prompt = system_prompt_template.format(env_name=run_config.task_id)
+        env_alias = f"{run_config.task_id}-{run_config.run_hash[:8]}"
+        system_prompt = system_prompt_template.format(env_name=env_alias)
         prompt = (
             system_prompt
             + "\n\n"
