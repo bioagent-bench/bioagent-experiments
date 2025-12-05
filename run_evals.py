@@ -25,8 +25,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 RUN_LOGS = Path(os.getenv("RUN_LOGS"))
 METADATA_PATH = Path("/home/dionizije/bioagent-bench/src/task_metadata.json")
 DATA_ROOT = Path("/home/dionizije/bioagent-data")
-MAX_WORKERS = 5
-REQUIRED_ENV_VARS = ("AZURE_OPENAI_API_KEY", "ANTHROPIC_FOUNDRY_API_KEY")
+REQUIRED_ENV_VARS = ("AZURE_OPENAI_API_KEY", "ANTHROPIC_FOUNDRY_API_KEY", "RUN_LOGS")
 
 
 def _ensure_required_env_vars() -> None:
@@ -49,7 +48,6 @@ def _build_run_config(
     otel_sink_host: str | None = None,
 ) -> RunConfig:
     timestamp = datetime.now()
-    system_prompt = prompts.get(system_prompt_name)
 
     otel_sink_host = otel_sink_host or "127.0.0.1:4317"
     run_hash = str(uuid.uuid4())
@@ -67,7 +65,6 @@ def _build_run_config(
         task_prompt=task.task_prompt,
         num_tools=len(tool_names),
         tool_names=list(tool_names),
-        system_prompt=system_prompt,
         system_prompt_name=system_prompt_name,
         experiment_name=experiment_name,
         model=model,
@@ -92,7 +89,7 @@ def _prepare_run_config(run_config: RunConfig) -> None:
 
 
 @contextmanager
-def temporary_mamba_environment(env_file: Path) -> Iterator[str]:
+def temporary_mamba_environment(env_file: Path, env_name: str) -> Iterator[str]:
     executable = "mamba"
     create_cmd = [
         executable,
@@ -100,11 +97,11 @@ def temporary_mamba_environment(env_file: Path) -> Iterator[str]:
         "create",
         "--yes",
         "--name",
-        "bioinformatics",
+        env_name,
         "--file",
         str(env_file),
     ]
-    logging.info("Provisioning evaluation environment %s", "bioinformatics")
+    logging.info("Provisioning evaluation environment %s", env_name)
     subprocess.run(
         create_cmd,
         check=True,
@@ -114,10 +111,10 @@ def temporary_mamba_environment(env_file: Path) -> Iterator[str]:
         text=True,
     )
     try:
-        yield "bioinformatics"
+        yield env_name
     finally:
-        remove_cmd = [executable, "env", "remove", "--yes", "--name", "bioinformatics"]
-        logging.info("Removing evaluation environment %s", "bioinformatics")
+        remove_cmd = [executable, "env", "remove", "--yes", "--name", env_name]
+        logging.info("Removing evaluation environment %s", env_name)
         subprocess.run(
             remove_cmd,
             check=False,
@@ -168,60 +165,63 @@ def _execute_tasks_in_env(
         return
 
     worker_count = max(1, min(max_workers, len(task_list)))
-    with temporary_mamba_environment(env_file=env_file) as env_name:
-        logging.info(
-            "Running %d tasks with up to %d concurrent workers in environment '%s'.",
-            len(task_list),
-            worker_count,
-            env_name,
-        )
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            active: dict = {}
-            tasks_iter = iter(task_list)
 
-            def _submit_next_task() -> bool:
-                try:
-                    task = next(tasks_iter)
-                except StopIteration:
-                    return False
-                run_config = build_run_config(task)
-                _prepare_run_config(run_config)
-                otel_ctx = run_otel_module(
-                    host=run_config.otel_sink_host,
-                    ndjson_path=str(run_config.otel_sink_path.resolve()),
-                )
-                logging.info(
-                    "Starting OTEL sink for task '%s' (run %s) on %s",
-                    task.task_id,
-                    run_config.run_hash,
-                    run_config.otel_sink_host,
-                )
-                otel_ctx.__enter__()
-                future = executor.submit(_run_single_task, env_name, run_config)
-                active[future] = (run_config, otel_ctx)
-                return True
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        active: dict = {}
+        tasks_iter = iter(task_list)
 
-            for _ in range(worker_count):
-                if not _submit_next_task():
-                    break
-
+        def _submit_next_task() -> bool:
             try:
-                while active:
-                    future = next(as_completed(list(active.keys())))
-                    run_config, otel_ctx = active.pop(future)
-                    try:
-                        future.result()
-                    finally:
-                        otel_ctx.__exit__(None, None, None)
-                    _submit_next_task()
+                task = next(tasks_iter)
+            except StopIteration:
+                return False
+            run_config = build_run_config(task)
+            _prepare_run_config(run_config)
+            env_ctx = temporary_mamba_environment(env_file=env_file, env_name=task.task_id)
+            try:
+                env_name = env_ctx.__enter__()
             except Exception:
-                for future, (_, otel_ctx) in active.items():
-                    future.cancel()
+                env_ctx.__exit__(None, None, None)
+                raise
+            otel_ctx = run_otel_module(
+                host=run_config.otel_sink_host,
+                ndjson_path=str(run_config.otel_sink_path.resolve()),
+            )
+            logging.info(
+                "Starting OTEL sink for task '%s' (run %s) on %s",
+                task.task_id,
+                run_config.run_hash,
+                run_config.otel_sink_host,
+            )
+            otel_ctx.__enter__()
+            future = executor.submit(_run_single_task, env_name, run_config)
+            active[future] = (run_config, otel_ctx, env_ctx)
+            return True
+
+        for _ in range(worker_count):
+            if not _submit_next_task():
+                break
+
+        try:
+            while active:
+                future = next(as_completed(list(active.keys())))
+                run_config, otel_ctx, env_ctx = active.pop(future)
+                try:
+                    future.result()
+                finally:
                     try:
                         otel_ctx.__exit__(None, None, None)
-                    except Exception:
-                        pass
-                raise
+                    finally:
+                        env_ctx.__exit__(None, None, None)
+                _submit_next_task()
+        except Exception:
+            for future, (_, otel_ctx, env_ctx) in active.items():
+                future.cancel()
+                try:
+                    otel_ctx.__exit__(None, None, None)
+                finally:
+                    env_ctx.__exit__(None, None, None)
+            raise
 
 
 @contextmanager
@@ -288,8 +288,8 @@ def run_environment(
 
         def _tool_names(_: DataSet) -> Sequence[str]:
             return ()
-
         suite_use_reference = use_reference_data
+
     elif suite == "minimal":
         experiment_name = "minimal-tool-environment"
         env_file = Path("envs/tools-environment.yml")
@@ -299,13 +299,13 @@ def run_environment(
         def _tool_names(task: DataSet) -> Sequence[str]:
             return tuple(tools_mapping_dict[task.task_id])
 
-        suite_use_reference = False
+        suite_use_reference = use_reference_data
+
     elif suite == "expanded":
         experiment_name = f"expanded-{num_extra_tools}-tool-environment"
         env_file = Path("envs/tools-environment.yml")
         relevant_tasks = [task for task in datasets if task.task_id in tools_mapping_dict]
         system_prompt_name = "v2"
-
         def _tool_names(task: DataSet) -> Sequence[str]:
             base_tools = tools_mapping_dict[task.task_id]
             other_tools = [
@@ -318,7 +318,7 @@ def run_environment(
             extra_tools = random.sample(other_tools, num_extra_tools)
             return tuple(base_tools + extra_tools)
 
-        suite_use_reference = False
+        suite_use_reference = use_reference_data
     else:
         raise ValueError(f"Unknown suite '{suite}'")
 
@@ -352,24 +352,14 @@ def run_environment(
 )
 @click.option(
     "--reference-mode",
-    type=click.Choice(["with", "without", "both"], case_sensitive=False),
-    default="with",
-    show_default=True,
-    help="Open suite only: whether to use reference data.",
+    type=click.Choice(["with", "without"], case_sensitive=False),
 )
 @click.option(
     "--max-workers",
     type=click.IntRange(1, None),
-    default=5,
+    default=4,
     show_default=True,
     help="Maximum number of tasks to run concurrently.",
-)
-@click.option(
-    "--num-extra-tools",
-    type=click.IntRange(0, None),
-    default=10,
-    show_default=True,
-    help="Expanded suite only: number of random tools to add.",
 )
 @click.option(
     "--model",
@@ -381,45 +371,26 @@ def main(
     suite: str,
     reference_mode: str,
     max_workers: int,
-    num_extra_tools: int,
     models: tuple[str, ...],
 ) -> None:
     _ensure_required_env_vars()
+    
     suite = suite.lower()
     reference_mode = reference_mode.lower()
+    
     selected_models = list(models) if models else MODELS
+    
+    use_reference = False
+    if reference_mode == "with":
+        use_reference = True
 
-    if suite == "open":
-        reference_modes: list[bool] = []
-        if reference_mode in ("with", "both"):
-            reference_modes.append(True)
-        if reference_mode in ("without", "both"):
-            reference_modes.append(False)
-        for model in selected_models:
-            for use_reference in reference_modes or [False]:
-                run_environment(
-                    suite="open",
-                    model_name=model,
-                    use_reference_data=use_reference,
-                    max_workers=max_workers,
-                    num_extra_tools=num_extra_tools,
-                )
-    elif suite == "minimal":
-        for model in selected_models:
-            run_environment(
-                suite="minimal",
-                model_name=model,
-                max_workers=max_workers,
-                num_extra_tools=num_extra_tools,
-            )
-    elif suite == "expanded":
-        for model in selected_models:
-            run_environment(
-                suite="expanded",
-                model_name=model,
-                max_workers=max_workers,
-                num_extra_tools=num_extra_tools,
-            )
+    # for model in selected_models.pop(0):
+    run_environment(
+        suite=suite,
+        model_name="gpt-5-1",
+        use_reference_data=use_reference,
+        max_workers=max_workers,
+    )
 
 
 if __name__ == "__main__":

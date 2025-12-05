@@ -14,6 +14,7 @@ from typing import Any, Iterator
 from otel import sum_token_counts
 from src.mcp_configs import modify_codex_config, remove_codex_mcp_config
 from .logs import RunConfig, configure_logging
+from .system_prompts import prompts
 
 
 configure_logging()
@@ -175,12 +176,16 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         else:
             input_data = glob_input_data(data_dir)
 
-        prompt = (
-            run_config.system_prompt
-            + "\n\n"
-            + run_config.task_prompt
-            + f"\n\nThe input data is: {input_data}"
-        )
+        system_prompt_template = prompts.get(run_config.system_prompt_name)
+        system_prompt = system_prompt_template.format(env_name=run_config.task_id)
+        print(system_prompt)
+        # prompt = (
+        #     run_config.system_prompt
+        #     + "\n\n"
+        #     + run_config.task_prompt
+        #     + f"\n\nThe input data is: {input_data}"
+        # )
+        prompt = "Hello, world!"
 
         if run_config.experiment_name.startswith("open-environment"):
             # we shouldn't use an old MCP if we run open-environment

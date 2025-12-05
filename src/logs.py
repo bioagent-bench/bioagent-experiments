@@ -40,7 +40,6 @@ class RunConfig:
     task_prompt: str
     num_tools: int
     tool_names: List[str]
-    system_prompt: str
     system_prompt_name: str
     experiment_name: str
     model: str
@@ -65,7 +64,6 @@ class RunConfig:
             "num_tools": self.num_tools,
             "tool_names": list(self.tool_names),
             "tools": list(self.tool_names),
-            "system_prompt": self.system_prompt,
             "system_prompt_name": self.system_prompt_name,
             "experiment_name": self.experiment_name,
             "input_tokens": self.input_tokens,
@@ -100,7 +98,6 @@ class RunConfig:
             task_prompt=payload["task_prompt"],
             num_tools=payload.get("num_tools", len(tool_names)),
             tool_names=list(tool_names),
-            system_prompt=payload["system_prompt"],
             system_prompt_name=payload["system_prompt_name"],
             experiment_name=payload["experiment_name"],
             model=payload["model"],
