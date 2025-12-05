@@ -26,6 +26,16 @@ RUN_LOGS = Path(os.getenv("RUN_LOGS"))
 METADATA_PATH = Path("/home/dionizije/bioagent-bench/src/task_metadata.json")
 DATA_ROOT = Path("/home/dionizije/bioagent-data")
 MAX_WORKERS = 5
+REQUIRED_ENV_VARS = ("AZURE_OPENAI_API_KEY", "ANTHROPIC_FOUNDRY_API_KEY")
+
+
+def _ensure_required_env_vars() -> None:
+    missing_env = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
+    if missing_env:
+        missing = ", ".join(missing_env)
+        raise click.ClickException(
+            f"Cannot run evaluations because the following environment variables are unset: {missing}"
+        )
 
 
 def _build_run_config(
@@ -374,6 +384,7 @@ def main(
     num_extra_tools: int,
     models: tuple[str, ...],
 ) -> None:
+    _ensure_required_env_vars()
     suite = suite.lower()
     reference_mode = reference_mode.lower()
     selected_models = list(models) if models else MODELS
