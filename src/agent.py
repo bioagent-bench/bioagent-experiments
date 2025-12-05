@@ -76,6 +76,26 @@ def glob_input_data(*input_dirs: Path) -> list[Path]:
     return sorted(files)
 
 
+def _build_subprocess_env(run_config: RunConfig) -> dict[str, str]:
+    env = os.environ.copy()
+
+    endpoint = run_config.otel_sink_host
+    if endpoint:
+        endpoint = endpoint if endpoint.startswith("http") else f"http://{endpoint}"
+        env["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint
+        env["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"] = endpoint
+        env["OTEL_EXPORTER_OTLP_GRPC_ENDPOINT"] = endpoint
+        env["OTEL_EXPORTER_OTLP_PROTOCOL"] = "grpc"
+
+    attrs_raw = env.get("OTEL_RESOURCE_ATTRIBUTES", "")
+    attrs = [entry.strip() for entry in attrs_raw.split(",") if entry.strip()]
+    attrs = [entry for entry in attrs if not entry.startswith("run_hash=")]
+    attrs.append(f"run_hash={run_config.run_hash}")
+    env["OTEL_RESOURCE_ATTRIBUTES"] = ",".join(attrs)
+
+    return env
+
+
 def copy_inputs_to_run_directory(
     source_root: Path,
     destination_root: Path,
@@ -201,6 +221,7 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
             )
         start_time = time.time()
         logging.info(f"Starting codex execution at {start_time}")
+        process_env = _build_subprocess_env(run_config)
         if run_config.model in ("claude-opus-4-5", "claude-sonnet-4-5"):
             subprocess.run(
                 [
@@ -210,7 +231,8 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
                     "--model",
                     run_config.model,
                     "--dangerously-skip-permissions",
-                ]
+                ],
+                env=process_env,
             )
         else:
             subprocess.run(
@@ -222,7 +244,8 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
                     run_config.model,
                     "--skip-git-repo-check",
                     "--yolo",
-                ]
+                ],
+                env=process_env,
             )
         end_time = time.time()
 

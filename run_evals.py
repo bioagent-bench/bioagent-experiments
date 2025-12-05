@@ -171,17 +171,7 @@ def _execute_tasks_in_env(
         _prepare_run_config(run_config)
         env_alias = f"{task.task_id}-{run_config.run_hash[:8]}"
         with temporary_mamba_environment(env_file=env_file, env_name=env_alias) as env_name:
-            logging.info(
-                "Starting OTEL sink for task '%s' (run %s) on %s",
-                run_config.task_id,
-                run_config.run_hash,
-                run_config.otel_sink_host,
-            )
-            with run_otel_module(
-                host=run_config.otel_sink_host,
-                ndjson_path=str(run_config.otel_sink_path.resolve()),
-            ):
-                _run_single_task(env_name, run_config)
+            _run_single_task(env_name, run_config)
 
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = [executor.submit(_run_task, task) for task in task_list]
@@ -195,7 +185,7 @@ def _execute_tasks_in_env(
 
 
 @contextmanager
-def run_otel_module(host: str, ndjson_path: str) -> Iterator[None]:
+def run_otel_module(host: str, ndjson_path: str, mode: str = "single") -> Iterator[None]:
     """
     Launch the OTEL sink as a separate Python module process:
       python -m otel --host ... --path ...
@@ -209,6 +199,8 @@ def run_otel_module(host: str, ndjson_path: str) -> Iterator[None]:
         str(host),
         "--path",
         str(ndjson_path),
+        "--mode",
+        mode,
     ]
     os.makedirs(os.path.dirname(ndjson_path) or ".", exist_ok=True)
 
@@ -292,6 +284,14 @@ def run_environment(
     else:
         raise ValueError(f"Unknown suite '{suite}'")
 
+    if not relevant_tasks:
+        logging.info("No tasks matched the '%s' suite.", suite)
+        return
+
+    otel_host = _allocate_otel_endpoint()
+    otel_root = RUN_LOGS / "otel"
+    otel_root.mkdir(parents=True, exist_ok=True)
+
     def _build(task: DataSet) -> RunConfig:
         return _build_run_config(
             task=task,
@@ -301,15 +301,21 @@ def run_environment(
             experiment_name=experiment_name,
             model=model_name,
             tool_names=_tool_names(task),
-            otel_sink_host=_allocate_otel_endpoint(),
+            otel_sink_host=otel_host,
         )
 
-    _execute_tasks_in_env(
-        tasks=relevant_tasks,
-        env_file=env_file,
-        max_workers=max_workers,
-        build_run_config=_build,
-    )
+    logging.info("Starting shared OTEL sink on %s.", otel_host)
+    with run_otel_module(
+        host=otel_host,
+        ndjson_path=str(otel_root.resolve()),
+        mode="multi",
+    ):
+        _execute_tasks_in_env(
+            tasks=relevant_tasks,
+            env_file=env_file,
+            max_workers=max_workers,
+            build_run_config=_build,
+        )
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})

@@ -18,6 +18,7 @@ import os
 import signal
 import sys
 from pathlib import Path
+from threading import Lock
 from typing import Any, Dict, Iterable, Tuple
 
 import grpc
@@ -53,6 +54,8 @@ def _extract_quick_fields(body_dict: Dict[str, Any]) -> Dict[str, Any]:
         }
         out["service.name"] = attrs.get("service.name")
         out["env"] = attrs.get("env")
+        if attrs.get("run_hash"):
+            out["run_hash"] = attrs.get("run_hash")
 
         scope_logs = rlogs[0].get("scope_logs", [])
         if scope_logs:
@@ -67,6 +70,8 @@ def _extract_quick_fields(body_dict: Dict[str, Any]) -> Dict[str, Any]:
                 out["event.name"] = lattrs.get("event.name") or lattrs.get("event")
                 out["model"] = lattrs.get("model")
                 out["originator"] = lattrs.get("originator")
+                if not out.get("run_hash") and lattrs.get("run_hash"):
+                    out["run_hash"] = lattrs.get("run_hash")
     except Exception:
         # Best-effort — never break ingestion.
         pass
@@ -115,6 +120,41 @@ def _attrs_to_dict(attrs_list: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
             val = val_obj.get(next(iter(val_obj)))
             out[key] = val
     return out
+
+
+def _extract_run_hash(body_dict: Dict[str, Any]) -> str | None:
+    """Try to pull a run identifier from resource or log attributes."""
+
+    def _from_attrs(attrs: Iterable[Dict[str, Any]] | None) -> str | None:
+        values = _attrs_to_dict(attrs or [])
+        for key in ("run_hash", "run.id", "runId", "codex.run_hash", "codex_run_hash"):
+            raw = values.get(key)
+            if raw is None:
+                continue
+            if isinstance(raw, str) and raw.strip():
+                return raw.strip()
+            return str(raw)
+        return None
+
+    for resource_log in body_dict.get("resource_logs", []) or []:
+        resource = resource_log.get("resource") or {}
+        run_hash = _from_attrs(resource.get("attributes"))
+        if run_hash:
+            return run_hash
+        for scope_log in resource_log.get("scope_logs", []) or []:
+            for log_record in scope_log.get("log_records", []) or []:
+                run_hash = _from_attrs(log_record.get("attributes"))
+                if run_hash:
+                    return run_hash
+    return None
+
+
+def _sanitize_run_hash(value: str | None) -> str:
+    if not value:
+        return "unknown"
+    safe = [c if c.isalnum() or c in ("-", "_") else "_" for c in value]
+    cleaned = "".join(safe).strip("_")
+    return cleaned or "unknown"
 
 
 def _extract_usage_from_record(lr: Dict[str, Any]) -> Tuple[int, int]:
@@ -208,24 +248,52 @@ def sum_token_counts(ndjson_path: str | Path) -> Tuple[int, int]:
 # gRPC server
 
 class LogSinkServicer(logs_service_pb2_grpc.LogsServiceServicer):
-    def __init__(self, out_path: str):
-        self.out_path = out_path
-        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    def __init__(self, out_path: str, multi_run: bool = False):
+        self.out_path = Path(out_path)
+        self.multi_run = multi_run
+        if self.multi_run:
+            self.out_path.mkdir(parents=True, exist_ok=True)
+        else:
+            os.makedirs(self.out_path.parent if self.out_path.parent else Path("."), exist_ok=True)
+        self._lock = Lock()
+        self._file_locks: dict[Path, Lock] = {}
+
+    def _get_lock(self, path: Path) -> Lock:
+        with self._lock:
+            lock = self._file_locks.get(path)
+            if lock is None:
+                lock = Lock()
+                self._file_locks[path] = lock
+            return lock
+
+    def _target_path(self, run_hash: str | None) -> Path:
+        if not self.multi_run:
+            return self.out_path
+        safe_hash = _sanitize_run_hash(run_hash)
+        return self.out_path / f"otlp-{safe_hash}.ndjson"
 
     def Export(self, request: logs_service_pb2.ExportLogsServiceRequest, context):
         body = _msg_to_dict(request)
+        run_hash = _extract_run_hash(body)
         envelope = {
             "received_at": _now_iso(),
             "kind": "otlp_logs_export",
             **_extract_quick_fields(body),
             "body": body,
         }
-        with open(self.out_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(envelope, ensure_ascii=False) + "\n")
+        if run_hash:
+            envelope.setdefault("run_hash", run_hash)
+        target = self._target_path(run_hash)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        lock = self._get_lock(target)
+        with lock:
+            with open(target, "a", encoding="utf-8") as f:
+                f.write(json.dumps(envelope, ensure_ascii=False) + "\n")
         return logs_service_pb2.ExportLogsServiceResponse()
 
 
-def run_server(host: str, ndjson_path: str):
+def run_server(host: str, ndjson_path: str, mode: str = "single"):
+    multi_run = mode.lower() == "multi"
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=4),
         options=[
@@ -233,12 +301,17 @@ def run_server(host: str, ndjson_path: str):
             ("grpc.max_send_message_length", 64 * 1024 * 1024),
         ],
     )
-    logs_service_pb2_grpc.add_LogsServiceServicer_to_server(LogSinkServicer(ndjson_path), server)
+    logs_service_pb2_grpc.add_LogsServiceServicer_to_server(
+        LogSinkServicer(ndjson_path, multi_run=multi_run), server
+    )
     bind_addr = f"{host}"
     server.add_insecure_port(bind_addr)
     server.start()
+    mode_label = "multi-run" if multi_run else "single-run"
     print(f"[mini-otel] listening for OTLP/gRPC logs on {bind_addr}", file=sys.stderr)
-    print(f"[mini-otel] writing NDJSON to {ndjson_path}", file=sys.stderr)
+    print(
+        f"[mini-otel] {mode_label} mode -> writing NDJSON to {ndjson_path}", file=sys.stderr
+    )
     return server
 
 
@@ -246,12 +319,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Minimal OTLP gRPC log sink (NDJSON).")
     parser.add_argument("--host")
     parser.add_argument("--path")
+    parser.add_argument("--mode", choices=["single", "multi"], default="single")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
-    server = run_server(args.host, args.path)
+    server = run_server(args.host, args.path, mode=args.mode)
 
     def _graceful(signum, frame):
         print("[mini-otel] shutting down…", file=sys.stderr)
