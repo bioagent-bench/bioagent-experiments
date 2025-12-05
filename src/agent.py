@@ -147,7 +147,7 @@ def isolated_run_environment(
     """
 
     copied_inputs_root = run_dir_path / "inputs"
-    logging.info(f"Copying inputs to run directory: {copied_inputs_root}")
+    logging.debug(f"Copying inputs to run directory: {copied_inputs_root}")
     copy_inputs_to_run_directory(inputs_root, copied_inputs_root, use_reference_data)
 
     previous_cwd = Path.cwd()
@@ -198,14 +198,12 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
 
         system_prompt_template = prompts.get(run_config.system_prompt_name)
         system_prompt = system_prompt_template.format(env_name=run_config.task_id)
-        print(system_prompt)
-        # prompt = (
-        #     run_config.system_prompt
-        #     + "\n\n"
-        #     + run_config.task_prompt
-        #     + f"\n\nThe input data is: {input_data}"
-        # )
-        prompt = "Hello, world!"
+        prompt = (
+            system_prompt
+            + "\n\n"
+            + run_config.task_prompt
+            + f"\n\nThe input data is: {input_data}"
+        )
 
         if run_config.experiment_name.startswith("open-environment"):
             # we shouldn't use an old MCP if we run open-environment
@@ -215,12 +213,12 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         else:
             tools_json = run_config.run_dir_path / "tools.json"
             tools_json.write_text(json.dumps(run_config.tool_names))
-            logging.info("Modifying Codex config for enabling tools")
+            logging.debug("Modifying Codex config for enabling tools")
             modify_codex_config(
                 username=run_config.experiment_name, tools_config=tools_json
             )
         start_time = time.time()
-        logging.info(f"Starting codex execution at {start_time}")
+        logging.debug(f"Starting codex execution at {start_time}")
         process_env = _build_subprocess_env(run_config)
         if run_config.model in ("claude-opus-4-5", "claude-sonnet-4-5"):
             subprocess.run(
@@ -249,14 +247,14 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
             )
         end_time = time.time()
 
-        logging.info(f"Codex execution finished at {end_time}")
+        logging.debug(f"Codex execution finished at {end_time}")
         run_config.duration = (end_time - start_time) / 60  # minutes
 
         try:
             in_tok, out_tok = sum_token_counts(run_config.otel_sink_path)
             run_config.input_tokens = int(in_tok)
             run_config.output_tokens = int(out_tok)
-            logging.info(f"Aggregated tokens — input: {in_tok}, output: {out_tok}")
+            logging.debug(f"Aggregated tokens — input: {in_tok}, output: {out_tok}")
         except Exception as e:
             logging.exception(f"Failed to aggregate token counts: {e}")
 
@@ -265,7 +263,7 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         # clean up input data after execution completes
         inputs_folder = run_dir_path / "inputs"
         if inputs_folder.exists():
-            logging.info(f"Deleting inputs folder: {inputs_folder}")
+            logging.debug(f"Deleting inputs folder: {inputs_folder}")
             shutil.rmtree(inputs_folder)
 
     return run_config

@@ -154,9 +154,6 @@ def _execute_tasks_in_env(
     build_run_config: Callable[[DataSet], RunConfig],
 ) -> int:
     task_list = list(tasks)
-    if not task_list:
-        logging.info("No tasks to run for environment file '%s'.", env_file)
-        return 0
 
     worker_count = max(1, min(max_workers, len(task_list)))
 
@@ -290,10 +287,6 @@ def run_environment(
     else:
         raise ValueError(f"Unknown suite '{suite}'")
 
-    if not relevant_tasks:
-        logging.info("No tasks matched the '%s' suite.", suite)
-        return
-
     otel_root = RUN_LOGS / "otel"
     otel_root.mkdir(parents=True, exist_ok=True)
     total_tasks = len(relevant_tasks)
@@ -368,14 +361,13 @@ def main(
     if reference_mode == "with":
         use_reference = True
 
-    # for model in selected_models.pop(0):
-    run_environment(
-        suite=suite,
-        model_name="gpt-5-1",
-        use_reference_data=use_reference,
-        max_workers=max_workers,
-    )
-
+    for model in selected_models:
+        run_environment(
+            suite=suite,
+            model_name=model,
+            use_reference_data=use_reference,
+            max_workers=max_workers,
+        )
 
 if __name__ == "__main__":
     main()
