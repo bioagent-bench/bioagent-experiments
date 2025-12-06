@@ -22,30 +22,62 @@ df['percent_completed'] = percent_completed.fillna(0).mul(100)
 
 print(df)
 
-pivot_df = df.pivot_table(
-    values='percent_completed',
-    index='task_id',
-    columns='experiment_name',
-    aggfunc='mean'
+model_summary = (
+    df.groupby("model", dropna=False)["percent_completed"]
+    .agg(["mean", "std", "count"])
+    .rename(columns={"mean": "avg_percent_completed", "std": "std_percent_completed"})
+    .reset_index()
+    .sort_values("avg_percent_completed", ascending=False)
 )
 
-pivot_std = df.pivot_table(
-    values='percent_completed',
-    index='task_id',
-    columns='experiment_name',
-    aggfunc='std'
-).fillna(0)
+print("\nAverage percent completion per model:")
+print(model_summary)
 
-fig, ax = plt.subplots(figsize=(12, 6))
-pivot_df.plot(kind='bar', ax=ax, yerr=pivot_std, capsize=4)
-
-ax.set_xlabel('Task ID')
-ax.set_ylabel('Completion (%)')
-ax.set_title('Percent Completed by Task ID across Different Experiments')
-ax.legend(title='Experiment Name', bbox_to_anchor=(1.05, 1), loc='upper left')
-plt.xticks(rotation=45, ha='right')
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.bar(
+    model_summary["model"],
+    model_summary["avg_percent_completed"],
+    yerr=model_summary["std_percent_completed"].fillna(0),
+    capsize=4,
+    color="#4C72B0",
+)
+ax.set_xlabel("Model")
+ax.set_ylabel("Completion (%)")
+ax.set_title("Average Percent Completed by Model")
+plt.xticks(rotation=20, ha="right")
 ax.set_ylim(0, 100)
 plt.tight_layout()
-plt.savefig('percent_completed_by_task.png', dpi=300, bbox_inches='tight')
-print(f"\nPlot saved to percent_completed_by_task.png")
+output_path = Path("percent_completed_by_model.png")
+plt.savefig(output_path, dpi=300, bbox_inches="tight")
+print(f"\nPlot saved to {output_path}")
+plt.show()
+
+task_summary = (
+    df.groupby("task_id", dropna=False)["percent_completed"]
+    .agg(["mean", "std", "count"])
+    .rename(columns={"mean": "avg_percent_completed", "std": "std_percent_completed"})
+    .reset_index()
+    .sort_values("avg_percent_completed", ascending=False)
+)
+
+print("\nAverage percent completion per task:")
+print(task_summary)
+
+fig, ax = plt.subplots(figsize=(12, 6))
+ax.bar(
+    task_summary["task_id"],
+    task_summary["avg_percent_completed"],
+    yerr=task_summary["std_percent_completed"].fillna(0),
+    capsize=4,
+    color="#55A868",
+)
+ax.set_xlabel("Task ID")
+ax.set_ylabel("Completion (%)")
+ax.set_title("Average Percent Completed by Task")
+plt.xticks(rotation=45, ha="right")
+ax.set_ylim(0, 100)
+plt.tight_layout()
+task_output_path = Path("percent_completed_by_task.png")
+plt.savefig(task_output_path, dpi=300, bbox_inches="tight")
+print(f"\nPlot saved to {task_output_path}")
 plt.show()
