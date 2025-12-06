@@ -123,7 +123,10 @@ def _build_results_match_guidance(task_id: str) -> str:
 
 
 def parse_agent_outputs(output_dir: Path) -> list[Path]:
-    """Return all outputs relative to ``output_dir``, skipping ``.snakemake`` data.
+    """Return outputs relative to ``output_dir`` up to two levels deep, skipping
+    ``.snakemake`` data.
+    If for example another software is installed it might create large nesting 
+    of installation files which fill up the context of the LLM.
 
     Args:
         output_dir (Path): Directory whose descendants should be returned.
@@ -137,6 +140,8 @@ def parse_agent_outputs(output_dir: Path) -> list[Path]:
     for path in root.rglob("*"):
         relative_path = path.relative_to(root)
         if ".snakemake" in relative_path.parts:
+            continue
+        if len(relative_path.parts) > 2:
             continue
         outputs.append(relative_path)
     return outputs
