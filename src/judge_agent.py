@@ -55,7 +55,7 @@ class EvaluationResultsGiabSchema(BaseModel):
     """
     steps_completed: int
     steps_to_completion: int
-    final_results_reached: bool
+    final_result_reached: bool
     f1_score: int
     results_match: bool
     notes: str
@@ -345,7 +345,8 @@ def eval_giab_metrics(
                         )
 
 def build_judge_prompt_csv(
-    input_data: list[Path],
+    input_data: list[Path], 
+    reference_data: list[Path],
     task_prompt: str,
     processing_tree: list[Path],
     results: str,
@@ -368,15 +369,17 @@ def build_judge_prompt_csv(
         "4. You are givne the truth data which is the expected output of the prompted pipeline."
         "5. You are given the prompt which the agent was given to complete."
         "-------------------------------------------------------------------------------\n"
-        f"1. Input and the reference data: {input_data}"
+        f"1. Input data: {input_data}"
         "\n"
-        f"2. Processing tree: {processing_tree}"
+        f"2. Reference data: {reference_data}"
         "\n"
-        f"3. Results: {results}"
+        f"3. Processing tree: {processing_tree}"
         "\n"
-        f"4. Truth: {truth}"
+        f"4. Results: {results}"
         "\n"
-        f"5. Prompt: {task_prompt}"
+        f"5. Truth: {truth}"
+        "\n"
+        f"6. Prompt: {task_prompt}"
         "----------------------------------------------------------------------------------\n"
         "Evaluation rules:\n"
         "Priortize evaluation of the pipeline completion over the correctness of the results."
@@ -403,6 +406,7 @@ def build_judge_prompt_csv(
 
 def build_judge_prompt_giab(
     input_data: list[Path],
+    reference_data: list[Path],
     task_prompt: str,
     processing_tree: list[Path],
     results: str,
@@ -426,11 +430,13 @@ def build_judge_prompt_giab(
         "-------------------------------------------------------------------------------"
         f"1. Input and the reference data: {input_data}"
         "\n"
-        f"2. Processing tree: {processing_tree}"
+        f"2. Reference data: {reference_data}"  
         "\n"
-        f"3. Results: {results}"
+        f"3. Processing tree: {processing_tree}"
         "\n"
-        f"4. Prompt: {task_prompt}"
+        f"4. Results: {results}"
+        "\n"
+        f"5. Prompt: {task_prompt}"
         "-------------------------------------------------------------------------------"
         "Evaluation rules:\n"
         "For estimating the number of steps to completion, try to estimate which bioinformatic-"

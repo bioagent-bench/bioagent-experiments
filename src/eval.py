@@ -3,7 +3,9 @@ import logging
 import os
 import sys
 from pathlib import Path
+from openai import OpenAI
 
+from pandas.core import base
 from tqdm import tqdm
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -12,39 +14,53 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.judge_agent import EvaluationResults, EvaluationResultsGiab, EvaluationResultsGiabSchema, EvaluationResultsSchema, build_judge_prompt_csv, build_judge_prompt_giab, eval_giab_metrics, parse_agent_outputs, parse_agent_results
 from src.logs import RunConfig, configure_logging
-from src.models import create_azure_model
 
 configure_logging()
 
+api_key_path = PROJECT_ROOT / ".keys" / "azure_api.key"
+openai_api_key = api_key_path.read_text()
+openai_api_url = PROJECT_ROOT / ".keys" / "azure_endpoint.key"
+openai_api_url = openai_api_url.read_text()
+
+openai_client = OpenAI(api_key=openai_api_key, base_url=openai_api_url)
+
 def run_eval(run_config: RunConfig):
     agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "outputs")
-    client = create_azure_model(framework="openai")
+
+    if run_config.use_reference_data:
+        reference_data = run_config.data_path / "data/reference"
+    else:
+        reference_data = "No reference data provided - In this mode the agent was supposed to download reference data"
 
     logging.info(f"\t\tRunning judge LLM to evaluate the results")
     if run_config.task_id == "giab":
         agent_results = eval_giab_metrics(
-            run_config.run_dir_path / "results",
-            run_config.data_path / "results",
-            run_config.data_path / "data" / "Agilent_v7.chr.bed",
-            run_config.data_path / "reference" / "Homo_sapiens_assembly38.fasta",
-        )
+            agent_results_dir=run_config.run_dir_path / "results",
+            truth_dir=run_config.data_path / "results",
+            input_bed=run_config.data_path / "data" / "Agilent_v7.chr.bed",
+            ref_fasta=run_config.data_path / "reference" / "Homo_sapiens_assembly38.fasta",
+        )        
+        
+        
         judge_prompt = build_judge_prompt_giab(
-            run_config.data_path / "data",
-            run_config.task_prompt,
-            agent_output_tree,
-            agent_results,
-            run_config.task_id,
+            input_data=run_config.data_path / "data/input",
+            reference_data=reference_data,
+            task_prompt=run_config.task_prompt,
+            processing_tree=agent_output_tree,
+            results=agent_results,
+            task_id=run_config.task_id,
         )
-        completion = client.beta.chat.completions.parse(
-            model="gpt-5",
-            messages=[{"role": "user", "content": judge_prompt}],
-            response_format=EvaluationResultsGiabSchema,
+        response = openai_client.responses.parse(
+            model="gpt-5.1",
+            reasoning={"effort": "high"},
+            text_format=EvaluationResultsGiabSchema,
+            input=judge_prompt
         )
-        parsed_response = completion.choices[0].message.parsed
+        parsed_response = response.output_parsed
         final_result = EvaluationResultsGiab(
             steps_completed=parsed_response.steps_completed,
             steps_to_completion=parsed_response.steps_to_completion,
-            final_results_reached=parsed_response.final_results_reached,
+            final_result_reached=parsed_response.final_result_reached,
             f1_score=parsed_response.f1_score,
             results_match=parsed_response.results_match,
             notes=parsed_response.notes,
@@ -54,19 +70,21 @@ def run_eval(run_config: RunConfig):
         agent_results = parse_agent_results(run_config.run_dir_path / "results")
         truth_results = parse_agent_results(run_config.data_path / "results")
         judge_prompt = build_judge_prompt_csv(
-            run_config.data_path / "data",
-            run_config.task_prompt,
-            agent_output_tree,
-            agent_results,
-            truth_results,
-            run_config.task_id,
+            input_data=run_config.data_path / "data/input",
+            reference_data=reference_data,
+            task_prompt=run_config.task_prompt,
+            processing_tree=agent_output_tree,
+            results=agent_results,
+            truth=truth_results,
+            task_id=run_config.task_id,
         )
-        completion = client.beta.chat.completions.parse(
-            model="gpt-5",
-            messages=[{"role": "user", "content": judge_prompt}],
-            response_format=EvaluationResultsSchema,
+        response = openai_client.responses.parse(
+            model="gpt-5.1",
+            reasoning={"effort": "medium"},
+            text_format=EvaluationResultsGiabSchema,
+            input=judge_prompt
         )
-        parsed_response = completion.choices[0].message.parsed
+        parsed_response = response.output_parsed
         final_result = EvaluationResults(
             steps_completed=parsed_response.steps_completed,
             steps_to_completion=parsed_response.steps_to_completion,
