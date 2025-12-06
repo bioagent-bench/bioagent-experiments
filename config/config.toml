@@ -32,6 +32,12 @@ model_provider = "azure"
 model_reasoning_effort = "high"
 wire_api = "responses"
 
+[profiles.gpt-5-1-codex-max]
+model = "gpt-5.1-codex-max"
+model_provider = "azure"
+model_reasoning_effort = "high"
+wire_api = "responses"
+
 [model_providers.azure]
 name = "Azure OpenAI"
 base_url = ADD_AZURE_URL_HERE # AZURE URL GOES HERE
