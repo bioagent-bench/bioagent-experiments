@@ -30,10 +30,11 @@ def run_eval(run_config: RunConfig):
     else:
         reference_data = "No reference data provided - In this mode the agent was supposed to download reference data"
 
+    download_dest = run_config.data_path.parent
     assert (run_config.data_path / "results").exists(), (
         "Results directory does not exist. "
         "Please download from bioagent-bench using: "
-        f'uv run python src/dataset.py download --results --dest "{run_config.data_path / "data/input"}"'
+        f'uv run python src/dataset.py download --results --no-data --no-reference --dest "{download_dest}"'
     )
 
     logging.info(f"\t\tRunning judge LLM to evaluate the results")
