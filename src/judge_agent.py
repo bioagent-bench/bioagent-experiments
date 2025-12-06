@@ -19,7 +19,7 @@ class EvaluationResults:
 class EvaluationResultsGiab:
     steps_completed: int
     steps_to_completion: int
-    final_results_reached: bool
+    final_result_reached: bool
     f1_score: int
     results_match: bool
     notes: str
@@ -47,7 +47,7 @@ class EvaluationResultsGiabSchema(BaseModel):
     Attributes:
         steps_completed (int): Number of steps the agent completed.
         steps_to_completion (int): Number of steps needed to reach completion.
-        final_results_reached (bool): Whether the agent reached the final results.
+        final_result_reached (bool): Whether the agent reached the final results.
         f1_score (int): F1 score for the evaluation.
         results_match (bool): Whether the GIAB run cleared the acceptance
             threshold.
