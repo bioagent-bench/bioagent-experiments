@@ -4,8 +4,6 @@ import os
 import sys
 from pathlib import Path
 from openai import OpenAI
-
-from pandas.core import base
 from tqdm import tqdm
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +29,12 @@ def run_eval(run_config: RunConfig):
         reference_data = run_config.data_path / "data/reference"
     else:
         reference_data = "No reference data provided - In this mode the agent was supposed to download reference data"
+
+    assert (run_config.data_path / "results").exists(), (
+        "Results directory does not exist. "
+        "Please download from bioagent-bench using: "
+        f'uv run python src/dataset.py download --results --dest "{run_config.data_path / "data/input"}"'
+    )
 
     logging.info(f"\t\tRunning judge LLM to evaluate the results")
     if run_config.task_id == "giab":
