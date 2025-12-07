@@ -110,10 +110,14 @@ if __name__ == "__main__":
     logging.info(f"Running evals for {run_logs_env}")
     runs_dir = Path(run_logs_env) / "runs"
     run_files = sorted(runs_dir.glob("*.json"))
-    for run_file in tqdm(run_files, desc="Evaluating runs", unit="run"):
-        run_config = RunConfig.load_run_metadata(run_file)
-        if run_config.eval_results is None:
-            logging.info(f"Running eval for {run_config.task_id}-{run_config.experiment_name}")
-            run_eval(run_config)
-        else:
-            logging.info(f"Eval already run for {run_config.task_id}-{run_config.experiment_name}")
+    run_configs = [RunConfig.load_run_metadata(run_file) for run_file in run_files]
+
+    run_configs_pending = [run_config for run_config in run_configs if run_config.eval_results is None]
+    logging.info(f"{len(run_configs_pending)}/{len(run_configs)} runs need evaluation")
+
+    if not run_configs_pending:
+        logging.info("No runs pending evaluation.")
+
+    for run_config in tqdm(run_configs_pending, desc="Evaluating runs", unit="run", total=len(run_configs_pending)):
+        logging.info(f"Running eval for {run_config.task_id}-{run_config.experiment_name}")
+        run_eval(run_config)

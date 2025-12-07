@@ -306,48 +306,70 @@ def eval_giab_metrics(
 
     truth_vcf = truth_dir / "HG001_GRCh38_1_22_v4.2.1_benchmark.vcf.gz"
     truth_bed = truth_dir / "HG001_GRCh38_1_22_v4.2.1_benchmark.bed"
+
+    # make sure that alongside ref_fasta there is also an indexed fasta
+    # this is for hap.py to work in this config
+    ref_fai = Path(f"{ref_fasta}.fai")
+    index_created = False
+    if not ref_fai.exists():
+        subprocess.run([
+            "mamba", "run", "-n", "hap",
+            "samtools", "faidx", str(ref_fasta)], check=True
+            )
+        index_created = True
     
-    # Create temporary directory for hap.py output
-    with tempfile.TemporaryDirectory() as temp_dir:
-        output_prefix = Path(temp_dir) / "evaluation"
-        
-        # Run hap.py
-        cmd = [
-            "mamba",
-            "run",
-            "-n", "hap",
-            "hap.py",
-            str(truth_vcf),
-            str(agent_vcf),
-            "-f", str(truth_bed),
-            "-o", str(output_prefix),
-            "-T", str(input_bed),
-            "-r", str(ref_fasta),
-            "--pass-only"
-        ]
-        
-        subprocess.run(cmd, check=True, capture_output=True)
-        
-        # Parse summary.csv file
-        summary_file = Path(f"{output_prefix}.summary.csv")
-        if summary_file.exists():
-            with summary_file.open("r") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    if row.get("Type") == "SNP":  # Return SNP metrics
-                        return (
-                            "These are benchmarking metrics from hap.py, which compares the "
-                            "called variants (QUERY) to the Genome in a Bottle truth set (TRUTH). "
-                            "The table shows results for SNPs, including the number of variants in "
-                            "the truth set and query, as well as the calculated recall, precision, "
-                            f"and F1-score.\n\n"
-                            f"Type: {row.get('Type')}\n"
-                            f"TRUTH Total: {row.get('TRUTH.TOTAL')}\n"
-                            f"QUERY Total: {row.get('QUERY.TOTAL')}\n"
-                            f"Recall: {row.get('METRIC.Recall')}\n"
-                            f"Precision: {row.get('METRIC.Precision')}\n"
-                            f"F1-Score: {row.get('METRIC.F1_Score')}"
-                        )
+    try:
+        # Create temporary directory for hap.py output
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_prefix = Path(temp_dir) / "evaluation"
+            
+            # Run hap.py
+            cmd = [
+                "mamba",
+                "run",
+                "-n", "hap",
+                "hap.py",
+                str(truth_vcf),
+                str(agent_vcf),
+                "-f", str(truth_bed),
+                "-o", str(output_prefix),
+                "-T", str(input_bed),
+                "-r", str(ref_fasta),
+                "--pass-only"
+            ]
+            
+            subprocess.run(cmd, check=True, capture_output=True)
+            
+            # Parse summary.csv file
+            summary_file = Path(f"{output_prefix}.summary.csv")
+            if summary_file.exists():
+                with summary_file.open("r") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        if row.get("Type") == "SNP":  # Return SNP metrics
+                            return (
+                                "These are benchmarking metrics from hap.py, which compares the "
+                                "called variants (QUERY) to the Genome in a Bottle truth set (TRUTH). "
+                                "The table shows results for SNPs, including the number of variants in "
+                                "the truth set and query, as well as the calculated recall, precision, "
+                                f"and F1-score.\n\n"
+                                f"Type: {row.get('Type')}\n"
+                                f"TRUTH Total: {row.get('TRUTH.TOTAL')}\n"
+                                f"QUERY Total: {row.get('QUERY.TOTAL')}\n"
+                                f"Recall: {row.get('METRIC.Recall')}\n"
+                                f"Precision: {row.get('METRIC.Precision')}\n"
+                                f"F1-Score: {row.get('METRIC.F1_Score')}"
+                            )
+    except:
+        return {'hap.py evaluation failed. This doesnt happen with valid files. \
+                Counting this case as a failed result.'}
+
+    finally:
+        # delete the indexed fasta because sometiems an LLM should generate it itself
+        # this is not nice coupling of eval and run loops but such is life
+        if index_created and ref_fai.exists():
+            ref_fai.unlink()
+    
 
 def build_judge_prompt_csv(
     input_data: list[Path], 
