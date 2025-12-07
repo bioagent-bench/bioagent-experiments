@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from otel import sum_token_counts
-from src.mcp_configs import modify_codex_config, remove_codex_mcp_config
+from src.mcp_configs import modify_claude_config, modify_codex_config, remove_claude_mcp_config, remove_codex_mcp_config
 from .logs import RunConfig, configure_logging
 from .system_prompts import prompts
 
@@ -209,6 +209,7 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         if run_config.experiment_name.startswith("open-environment"):
             # we shouldn't use an old MCP if we run open-environment
             remove_codex_mcp_config()
+            remove_claude_mcp_config()
 
         # set the required tools in the MCP
         else:
@@ -221,7 +222,10 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         start_time = time.time()
         logging.debug(f"Starting codex execution at {start_time}")
         process_env = _build_subprocess_env(run_config)
+        
         if run_config.model in ("claude-opus-4-5", "claude-sonnet-4-5"):
+            # this enables the claude mcp server
+            modify_claude_config(run_config.experiment_name, tools_json)
             subprocess.run(
                 [
                     "claude",

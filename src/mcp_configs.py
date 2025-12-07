@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import subprocess
 from typing import Any
 
 import toml
@@ -49,3 +50,34 @@ def remove_codex_mcp_config() -> None:
             config.pop("mcp_servers", None)
 
         codex_path.write_text(toml.dumps(config), encoding="utf-8")
+
+def modify_claude_config(username: str, tools_config: Path) -> None:
+    remove_claude_mcp_config()
+    subprocess.run(
+        [
+            "claude",
+            "mcp",
+            "add",
+            "--transport",
+            "stdio",
+            "bioinformatics-mcp",
+            "--",
+            "/home/dionizije/.local/share/mamba/envs/bioinformatics-mcp/bin/python" \
+            "/home/dionizije/bioinformatics-mcp/mcp_server.py" \
+            "--no-dashboard" \
+            "--user",
+            username,
+            "--tool-config",
+            tools_config,
+        ]
+    )
+
+def remove_claude_mcp_config() -> None:
+    subprocess.run(
+        [
+            "claude",
+            "mcp",
+            "remove"
+            "bioinformatics-mcp",
+        ]
+    )
