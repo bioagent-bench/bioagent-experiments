@@ -9,5 +9,8 @@
         "OTEL_LOGS_EXPORTER": "otlp",
         "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
         "OTEL_EXPORTER_OTLP_ENDPOINT": "http://127.0.0.1:4317",
+        "OTEL_LOG_USER_PROMPTS": "1",
+        "MCP_TOOL_TIMEOUT": "10800000",
+        "BASH_MAX_TIMEOUT_MS": "10800000"
     }
 }
