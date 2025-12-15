@@ -225,7 +225,6 @@ def run_environment(
     model_name: str,
     use_reference_data: bool = False,
     max_workers: int = 1,
-    num_extra_tools: int = 10,
 ) -> None:
     """
     Execute evaluation suite in a mamba environment. `suite` accepts
@@ -264,7 +263,7 @@ def run_environment(
         suite_use_reference = use_reference_data
 
     elif suite == "expanded":
-        experiment_name = f"expanded-{num_extra_tools}-tool-environment"
+        experiment_name = f"expanded-{10}-tool-environment"
         env_file = Path("envs/tools-environment.yml")
         relevant_tasks = [
             task for task in datasets if task.task_id in tools_mapping_dict
@@ -280,7 +279,51 @@ def run_environment(
                 for tool in tools
                 if tool not in base_tools
             ]
-            extra_tools = random.sample(other_tools, num_extra_tools)
+            extra_tools = random.sample(other_tools, 10)
+            return tuple(base_tools + extra_tools)
+
+        suite_use_reference = use_reference_data
+
+    elif suite == "expanded":
+        experiment_name = f"expanded-{20}-tool-environment"
+        env_file = Path("envs/tools-environment.yml")
+        relevant_tasks = [
+            task for task in datasets if task.task_id in tools_mapping_dict
+        ]
+        system_prompt_name = "v2"
+
+        def _tool_names(task: DataSet) -> Sequence[str]:
+            base_tools = tools_mapping_dict[task.task_id]
+            other_tools = [
+                tool
+                for key, tools in tools_mapping_dict.items()
+                if key != task.task_id
+                for tool in tools
+                if tool not in base_tools
+            ]
+            extra_tools = random.sample(other_tools, 20)
+            return tuple(base_tools + extra_tools)
+
+        suite_use_reference = use_reference_data
+
+    elif suite == "expanded":
+        experiment_name = f"expanded-{30}-tool-environment"
+        env_file = Path("envs/tools-environment.yml")
+        relevant_tasks = [
+            task for task in datasets if task.task_id in tools_mapping_dict
+        ]
+        system_prompt_name = "v2"
+
+        def _tool_names(task: DataSet) -> Sequence[str]:
+            base_tools = tools_mapping_dict[task.task_id]
+            other_tools = [
+                tool
+                for key, tools in tools_mapping_dict.items()
+                if key != task.task_id
+                for tool in tools
+                if tool not in base_tools
+            ]
+            extra_tools = random.sample(other_tools, 30)
             return tuple(base_tools + extra_tools)
 
         suite_use_reference = use_reference_data
@@ -322,7 +365,7 @@ def run_environment(
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--suite",
-    type=click.Choice(["open", "minimal", "expanded"], case_sensitive=False),
+    type=click.Choice(["open", "minimal", "expanded-10", "expanded-20", "expanded-30"], case_sensitive=False),
     default="open",
     show_default=True,
     help="Which evaluation configuration to run.",
