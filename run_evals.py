@@ -292,12 +292,7 @@ def run_environment(
             task for task in datasets if task.task_id in tools_mapping_dict
         ]
         system_prompt_name = "v2"
-
-        def _tool_names(_: DataSet) -> Sequence[str]:
-            return ()
-
         suite_use_reference = use_reference_data
-        
     else:
         raise ValueError(f"Unknown suite '{suite}'")
 
@@ -336,7 +331,7 @@ def run_environment(
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--suite",
-    type=click.Choice(["open", "minimal", "expanded", "all"], case_sensitive=False),
+    type=click.Choice(["open", "minimal", "expanded"], case_sensitive=False),
     default="open",
     show_default=True,
     help="Which evaluation configuration to run.",
