@@ -212,10 +212,6 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
             remove_claude_mcp_config()
 
         # set the required tools in the MCP
-        elif run_config.experiment_name.startswith("all-tool"):
-            modify_codex_config(
-                
-            )
         else:
             tools_json = run_config.run_dir_path / "tools.json"
             tools_json.write_text(json.dumps(run_config.tool_names))
