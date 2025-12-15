@@ -209,10 +209,12 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         if run_config.experiment_name.startswith("open-environment"):
             # we shouldn't use an old MCP if we run open-environment
             remove_codex_mcp_config()
+            remove_claude_mcp_config()
+
         # set the required tools in the MCP
         elif run_config.experiment_name.startswith("all-tool"):
             modify_codex_config(
-                username=run_config.experiment_name, tools_config=None
+                
             )
         else:
             tools_json = run_config.run_dir_path / "tools.json"
@@ -227,12 +229,7 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         
         if run_config.model in ("claude-opus-4-5", "claude-sonnet-4-5"):
             # this enables the claude mcp server
-            if run_config.experiment_name.startswith("all-tool"):
-                modify_claude_config(run_config.experiment_name, None)
-            elif run_config.experiment_name.startswith("open-environment"):
-                remove_claude_mcp_config()
-            else:
-                modify_claude_config(run_config.experiment_name, tools_json)
+            modify_claude_config(run_config.experiment_name, tools_json)
             subprocess.run(
                 [
                     "claude",
