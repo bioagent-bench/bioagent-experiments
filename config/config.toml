@@ -4,39 +4,34 @@ network_access = true
 [notice]
 "hide_gpt-5.1-codex-max_migration_prompt" = true
 
-[profiles.gpt-5-1-codex]
-model = "gpt-5.1-codex"
-model_provider = "azure"
-model_reasoning_effort = "high"
-wire_api = "responses"
-
-[profiles.mistral-large-3]
-model = "Mistral-Large-3"
-model_provider = "azure"
-model_reasoning_effort = "high"
-
-[profiles.deepseek-v3-0324]
-model = "DeepSeek-V3-0324"
-model_provider = "azure"
-model_reasoning_effort = "high"
-
-[profiles.gpt-5-1]
-model = "gpt-5.1"
-model_provider = "azure"
-model_reasoning_effort = "high"
-wire_api = "responses"
-
 [profiles.gpt-oss-120b]
 model = "gpt-oss-120b"
 model_provider = "azure"
 model_reasoning_effort = "high"
-wire_api = "responses"
+wire_api = "chat"
 
 [profiles.gpt-5-1-codex-max]
 model = "gpt-5.1-codex-max"
 model_provider = "azure"
 model_reasoning_effort = "high"
-wire_api = "responses"
+wire_api="responses"
+
+[profiles.deepseek-v3-2]
+model = "DeepSeek-V3.2-Speciale"
+model_provider = "azure"
+model_reasoning_effort = "high"
+wire_api="chat"
+
+[profiles.kimi-k2-thinking]
+model = "Kimi-K2-Thinking"
+model_provider = "azure"
+model_reasoning_effort = "high"
+wire_api="chat"
+
+[profiles.gpt-5-2]
+model = "gpt-5.2-codex-max"
+model_provider = "azure"
+model_reasoning_effort = "xhigh"
 
 [model_providers.azure]
 name = "Azure OpenAI"
