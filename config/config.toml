@@ -4,18 +4,6 @@ network_access = true
 [notice]
 "hide_gpt-5.1-codex-max_migration_prompt" = true
 
-[profiles.gpt-oss-120b]
-model = "gpt-oss-120b"
-model_provider = "azure"
-model_reasoning_effort = "high"
-wire_api = "chat"
-
-[profiles.gpt-5-1-codex-max]
-model = "gpt-5.1-codex-max"
-model_provider = "azure"
-model_reasoning_effort = "high"
-wire_api="responses"
-
 [profiles.deepseek-v3-2]
 model = "DeepSeek-V3.2-Speciale"
 model_provider = "azure"
