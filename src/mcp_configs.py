@@ -62,13 +62,13 @@ def modify_claude_config(username: str, tools_config: Path) -> None:
             "stdio",
             "bioinformatics-mcp",
             "--",
-            "/home/dionizije/.local/share/mamba/envs/bioinformatics-mcp/bin/python" \
-            "/home/dionizije/bioinformatics-mcp/mcp_server.py" \
-            "--no-dashboard" \
+            "/home/dionizije/.local/share/mamba/envs/bioinformatics-mcp/bin/python",
+            "/home/dionizije/bioinformatics-mcp/mcp_server.py",
+            "--no-dashboard",
             "--user",
             username,
             "--tool-config",
-            tools_config,
+            str(tools_config),
         ]
     )
 
@@ -77,7 +77,7 @@ def remove_claude_mcp_config() -> None:
         [
             "claude",
             "mcp",
-            "remove"
+            "remove",
             "bioinformatics-mcp",
         ]
     )
