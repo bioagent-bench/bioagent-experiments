@@ -284,6 +284,15 @@ def run_environment(
             return tuple(base_tools + extra_tools)
 
         suite_use_reference = use_reference_data
+
+    elif suite == "all":
+        experiment_name = f"all-tool-environment"
+        env_file = Path("envs/tools-environment.yml")
+        relevant_tasks = [
+            task for task in datasets if task.task_id in tools_mapping_dict
+        ]
+        system_prompt_name = "v2"
+        suite_use_reference = use_reference_data
     else:
         raise ValueError(f"Unknown suite '{suite}'")
 
