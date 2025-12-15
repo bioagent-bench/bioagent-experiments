@@ -225,7 +225,8 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         
         if run_config.model in ("claude-opus-4-5", "claude-sonnet-4-5"):
             # this enables the claude mcp server
-            modify_claude_config(run_config.experiment_name, tools_json)
+            if not run_config.experiment_name.startswith("open-environment"):
+                modify_claude_config(run_config.experiment_name, tools_json)
             subprocess.run(
                 [
                     "claude",
