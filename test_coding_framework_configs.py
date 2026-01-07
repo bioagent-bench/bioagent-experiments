@@ -4,26 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
+from tqdm import tqdm
 
-try:
-    from tqdm import tqdm
-
-    HAS_TQDM = True
-except ImportError:
-    # Fallback if tqdm is not available
-    HAS_TQDM = False
-
-    def tqdm(iterable, **kwargs):
-        return iterable
-
-    class TqdmWrite:
-        @staticmethod
-        def write(msg):
-            print(msg)
-
-    tqdm.write = TqdmWrite.write
-
-# Add src to path if needed
 sys.path.insert(0, str(Path(__file__).parent))
 
 from src.models import MODELS
@@ -49,7 +31,7 @@ def test_codex_command(model: str) -> Tuple[bool, int, str, str]:
             model,
             "--dangerously-skip-permissions",
         ]
-    else:
+    elif model:
         command = [
             "codex",
             "exec",
