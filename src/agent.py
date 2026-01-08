@@ -238,7 +238,7 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
                 ],
                 env=process_env,
             )
-        else:
+        elif run_config.model.startswith("gpt"):
             subprocess.run(
                 [
                     "codex",
@@ -250,6 +250,16 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
                     "--yolo",
                 ],
                 env=process_env,
+            )
+        else:
+            subprocess.run(
+                [
+                    "opencode",
+                    "run",
+                    prompt,
+                    "--model",
+                    run_config.model,
+                ]
             )
         end_time = time.time()
 

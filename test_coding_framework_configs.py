@@ -31,7 +31,7 @@ def test_codex_command(model: str) -> Tuple[bool, int, str, str]:
             model,
             "--dangerously-skip-permissions",
         ]
-    elif model == "gpt-5-1-codex-max":
+    elif model == "gpt-5-1-codex-max" or model == "gpt-5-2":
         command = [
             "codex",
             "exec",
@@ -57,7 +57,7 @@ def test_codex_command(model: str) -> Tuple[bool, int, str, str]:
             text=True,
             check=False,
         )
-
+        print(result.stdout)
         success = result.returncode == 0
         return success, result.returncode, result.stdout, result.stderr
 

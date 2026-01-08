@@ -26,7 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 RUN_LOGS = Path(os.getenv("RUN_LOGS"))
 METADATA_PATH = Path("/home/dionizije/bioagent-bench/src/task_metadata.json")
 DATA_ROOT = Path("/home/dionizije/bioagent-data")
-REQUIRED_ENV_VARS = ("AZURE_OPENAI_API_KEY", "ANTHROPIC_FOUNDRY_API_KEY", "RUN_LOGS")
+REQUIRED_ENV_VARS = ("RUN_LOGS", "OPENROUTER_API_KEY")
 
 
 def _ensure_required_env_vars() -> None:

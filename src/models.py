@@ -7,7 +7,7 @@ MODELS = [
     "openrouter/z-ai/glm-4.7",
     "openrouter/qwen/qwen3-coder-30b-a3b-instruct",
     # frontier
-    "openrouter/openai/gpt-5.2",
+    "gpt-5-2",
     "openrouter/google/gemini-3-pro-preview",
     # "claude-opus-4-5",
     # "claude-sonnet-4-5",
