@@ -31,7 +31,7 @@ def test_codex_command(model: str) -> Tuple[bool, int, str, str]:
             model,
             "--dangerously-skip-permissions",
         ]
-    elif model:
+    elif model == "gpt-5-1-codex-max":
         command = [
             "codex",
             "exec",
@@ -40,6 +40,15 @@ def test_codex_command(model: str) -> Tuple[bool, int, str, str]:
             model,
             "--skip-git-repo-check",
             "--yolo",
+        ]
+
+    elif model.startswith("openrouter/"):
+        command = [
+            "opencode",
+            "run",
+            "Hello",
+            "--model",
+            model,
         ]
     try:
         result = subprocess.run(
