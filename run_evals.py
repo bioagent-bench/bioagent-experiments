@@ -4,8 +4,10 @@ from __future__ import annotations
 import logging
 import os
 import random
+import signal
 import subprocess
 import sys
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
@@ -133,14 +135,85 @@ def _run_agent_subprocess(env_name: str, config_path: Path) -> None:
     subprocess.run(cmd, check=True, cwd=PROJECT_ROOT, env=env)
 
 
-def _run_single_task(env_name: str, run_config: RunConfig) -> None:
+def _run_agent_subprocess_with_timeout(
+    env_name: str, config_path: Path, timeout_seconds: float | None
+) -> None:
+    """Run the agent subprocess with an optional timeout.
+
+    Args:
+        env_name (str): Mamba environment name to run under.
+        config_path (Path): Path to the serialized RunConfig JSON file.
+        timeout_seconds (float | None): Timeout in seconds. When None, no timeout is enforced.
+
+    Returns:
+        None: Runs the subprocess as a side effect.
+
+    Raises:
+        subprocess.TimeoutExpired: If the subprocess exceeds the configured timeout.
+        subprocess.CalledProcessError: If the subprocess exits non-zero.
+    """
+
+    executable = "mamba"
+    cmd = [
+        executable,
+        "run",
+        "--name",
+        env_name,
+        "python",
+        "-m",
+        "src.agent",
+        "--config",
+        str(config_path),
+    ]
+
+    env = os.environ.copy()
+    if timeout_seconds is None:
+        subprocess.run(cmd, check=True, cwd=PROJECT_ROOT, env=env)
+        return
+
+    # Use a process group so we can terminate the whole tree (mamba -> python -> child tools).
+    start = time.time()
+    proc = subprocess.Popen(
+        cmd,
+        cwd=PROJECT_ROOT,
+        env=env,
+        start_new_session=True,
+    )
+    try:
+        remaining = max(0.0, timeout_seconds - (time.time() - start))
+        proc.wait(timeout=remaining)
+    except subprocess.TimeoutExpired as exc:
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=10)
+        except Exception:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except Exception:
+                pass
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=timeout_seconds) from exc
+
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd)
+
+
+def _run_single_task(
+    env_name: str, run_config: RunConfig, timeout_seconds: float | None
+) -> None:
     logging.info(
         "Running task '%s' (run %s) in environment '%s'.",
         run_config.task_id,
         run_config.run_hash,
         env_name,
     )
-    _run_agent_subprocess(env_name=env_name, config_path=run_config.metadata_path)
+    _run_agent_subprocess_with_timeout(
+        env_name=env_name,
+        config_path=run_config.metadata_path,
+        timeout_seconds=timeout_seconds,
+    )
     logging.info("Completed task '%s'.", run_config.task_id)
 
 
@@ -148,6 +221,7 @@ def _execute_tasks_in_env(
     tasks: Sequence[DataSet],
     env_file: Path,
     build_run_config: Callable[[DataSet], RunConfig],
+    timeout_seconds: float | None,
 ) -> int:
     """Run tasks sequentially in isolated mamba environments.
 
@@ -155,6 +229,7 @@ def _execute_tasks_in_env(
         tasks (Sequence[DataSet]): Tasks to execute.
         env_file (Path): Conda/mamba environment YAML file.
         build_run_config (Callable[[DataSet], RunConfig]): Factory that creates a RunConfig per task.
+        timeout_seconds (float | None): Per-task timeout in seconds. When None, no timeout is enforced.
 
     Returns:
         int: Number of tasks completed successfully.
@@ -166,7 +241,36 @@ def _execute_tasks_in_env(
         _prepare_run_config(run_config)
         env_alias = f"{task.task_id}-{run_config.run_hash[:8]}"
         with temporary_mamba_environment(env_file=env_file, env_name=env_alias) as env_name:
-            _run_single_task(env_name, run_config)
+            try:
+                _run_single_task(env_name, run_config, timeout_seconds=timeout_seconds)
+            except subprocess.TimeoutExpired:
+                run_config.error_type = "timeout"
+                hours = None if timeout_seconds is None else timeout_seconds / 3600
+                run_config.error_message = (
+                    "Run exceeded timeout."
+                    if hours is None
+                    else f"Run exceeded timeout ({hours:.2f} hours)."
+                )
+                run_config.save_run_metadata()
+                logging.exception(
+                    "Task '%s' (run %s) exceeded timeout; continuing to next task.",
+                    run_config.task_id,
+                    run_config.run_hash,
+                )
+                continue
+            except subprocess.CalledProcessError as exc:
+                run_config.error_type = "subprocess_failed"
+                run_config.error_message = (
+                    f"Agent subprocess failed with return code {exc.returncode}."
+                )
+                run_config.save_run_metadata()
+                logging.exception(
+                    "Task '%s' (run %s) failed (return code %s); continuing to next task.",
+                    run_config.task_id,
+                    run_config.run_hash,
+                    exc.returncode,
+                )
+                continue
         completed += 1
     return completed
 
@@ -216,6 +320,7 @@ def run_environment(
     model_name: str,
     use_reference_data: bool = False,
     task_ids: Sequence[str] | None = None,
+    timeout_hours: float = 4.0,
 ) -> None:
     """
     Execute evaluation suite sequentially in isolated mamba environments.
@@ -225,6 +330,7 @@ def run_environment(
         model_name (str): Model identifier/profile.
         use_reference_data (bool): Whether to include reference data.
         task_ids (Sequence[str] | None): Optional list of task_ids to run. When None, runs all tasks in the suite.
+        timeout_hours (float): Per-task timeout in hours.
     """
 
     datasets = DataSet.load_all(metadata_path=str(METADATA_PATH), data_root=str(DATA_ROOT))
@@ -310,10 +416,12 @@ def run_environment(
 
     logging.info("Starting shared OTEL sink on %s.", OTEL_SINK_HOST)
     with run_otel_module(host=OTEL_SINK_HOST, ndjson_path=str(otel_root.resolve()), mode="multi"):
+        timeout_seconds = None if timeout_hours <= 0 else timeout_hours * 3600
         completed = _execute_tasks_in_env(
             tasks=relevant_tasks,
             env_file=env_file,
             build_run_config=_build,
+            timeout_seconds=timeout_seconds,
         )
 
     click.echo(f"Completed {completed}/{total_tasks} tasks for suite '{suite}' with model '{model_name}'.")
@@ -344,11 +452,19 @@ def run_environment(
     multiple=True,
     help="Repeat to run only the provided task ids (defaults to all tasks in the suite).",
 )
+@click.option(
+    "--timeout-hours",
+    type=float,
+    default=4.0,
+    show_default=True,
+    help="Per-task timeout in hours. Use 0 or a negative value to disable the timeout.",
+)
 def main(
     suite: str,
     reference_mode: str,
     models: tuple[str, ...],
     task_ids: tuple[str, ...],
+    timeout_hours: float,
 ) -> None:
     configure_logging()
     _ensure_required_env_vars()
@@ -368,6 +484,7 @@ def main(
             model_name=model,
             use_reference_data=use_reference,
             task_ids=task_ids or None,
+            timeout_hours=timeout_hours,
         )
 
 
