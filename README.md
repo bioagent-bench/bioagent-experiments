@@ -47,7 +47,7 @@ mamba create --name hap hap.py
 ## Canonical run
 1. run_evals.py
 ```bash
-python run_evals.py --suite open --reference-mode with --max-workers 4
+python run_evals.py --suite open --reference-mode with
 ```
 
 2. src/eval.py

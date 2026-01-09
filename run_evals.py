@@ -4,11 +4,9 @@ from __future__ import annotations
 import logging
 import os
 import random
-import socket
 import subprocess
 import sys
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -23,7 +21,8 @@ from src.system_prompts import prompts
 
 OTEL_SINK_HOST = "127.0.0.1:4317"
 PROJECT_ROOT = Path(__file__).resolve().parent
-RUN_LOGS = Path(os.getenv("RUN_LOGS"))
+# Populated in main() after validating environment variables.
+RUN_LOGS: Path | None = None
 METADATA_PATH = Path("/home/dionizije/bioagent-bench/src/task_metadata.json")
 DATA_ROOT = Path("/home/dionizije/bioagent-data")
 REQUIRED_ENV_VARS = ("RUN_LOGS", "OPENROUTER_API_KEY")
@@ -36,7 +35,6 @@ def _ensure_required_env_vars() -> None:
         raise click.ClickException(
             f"Cannot run evaluations because the following environment variables are unset: {missing}"
         )
-
 
 def _build_run_config(
     task: DataSet,
@@ -56,7 +54,6 @@ def _build_run_config(
     metadata_path = run_logs / "runs" / f"{run_hash}.json"
 
     otel_path = run_logs / "otel" / f"otlp-{run_hash}.ndjson"
-
     return RunConfig(
         metadata_path=metadata_path,
         run_hash=run_hash,
@@ -70,7 +67,7 @@ def _build_run_config(
         experiment_name=experiment_name,
         model=model,
         run_dir_path=run_root,
-        data_path=Path(task.path) if task.path else None,
+        data_path=Path(task.path),
         otel_sink_host=otel_sink_host,
         otel_sink_path=otel_path,
     )
@@ -150,33 +147,27 @@ def _run_single_task(env_name: str, run_config: RunConfig) -> None:
 def _execute_tasks_in_env(
     tasks: Sequence[DataSet],
     env_file: Path,
-    max_workers: int,
     build_run_config: Callable[[DataSet], RunConfig],
 ) -> int:
-    task_list = list(tasks)
+    """Run tasks sequentially in isolated mamba environments.
 
-    worker_count = max(1, min(max_workers, len(task_list)))
+    Args:
+        tasks (Sequence[DataSet]): Tasks to execute.
+        env_file (Path): Conda/mamba environment YAML file.
+        build_run_config (Callable[[DataSet], RunConfig]): Factory that creates a RunConfig per task.
 
-    def _run_task(task: DataSet) -> None:
+    Returns:
+        int: Number of tasks completed successfully.
+    """
+
+    completed = 0
+    for task in list(tasks):
         run_config = build_run_config(task)
         _prepare_run_config(run_config)
         env_alias = f"{task.task_id}-{run_config.run_hash[:8]}"
-        with temporary_mamba_environment(
-            env_file=env_file, env_name=env_alias
-        ) as env_name:
+        with temporary_mamba_environment(env_file=env_file, env_name=env_alias) as env_name:
             _run_single_task(env_name, run_config)
-
-    completed = 0
-    with ThreadPoolExecutor(max_workers=worker_count) as executor:
-        futures = [executor.submit(_run_task, task) for task in task_list]
-        try:
-            for future in as_completed(futures):
-                future.result()
-                completed += 1
-        except Exception:
-            for future in futures:
-                future.cancel()
-            raise
+        completed += 1
     return completed
 
 
@@ -224,14 +215,19 @@ def run_environment(
     suite: str,
     model_name: str,
     use_reference_data: bool = False,
-    max_workers: int = 1,
+    task_ids: Sequence[str] | None = None,
 ) -> None:
     """
-    Execute evaluation suite in a mamba environment. `suite` accepts
-    "open", "minimal", or "expanded".
+    Execute evaluation suite sequentially in isolated mamba environments.
+
+    Args:
+        suite (str): One of "open", "minimal", "expanded-10", "expanded-20", "expanded-30".
+        model_name (str): Model identifier/profile.
+        use_reference_data (bool): Whether to include reference data.
+        task_ids (Sequence[str] | None): Optional list of task_ids to run. When None, runs all tasks in the suite.
     """
 
-    datasets = DataSet.load_all(metadata_path=METADATA_PATH, data_root=DATA_ROOT)
+    datasets = DataSet.load_all(metadata_path=str(METADATA_PATH), data_root=str(DATA_ROOT))
     suite = suite.lower()
 
     if suite == "open":
@@ -247,27 +243,24 @@ def run_environment(
         def _tool_names(_: DataSet) -> Sequence[str]:
             return ()
 
-        suite_use_reference = use_reference_data
-
     elif suite == "minimal":
         experiment_name = "minimal-tool-environment"
         env_file = Path("envs/tools-environment.yml")
-        relevant_tasks = [
-            task for task in datasets if task.task_id in tools_mapping_dict
-        ]
+        relevant_tasks = [task for task in datasets if task.task_id in tools_mapping_dict]
         system_prompt_name = "v2"
 
         def _tool_names(task: DataSet) -> Sequence[str]:
             return tuple(tools_mapping_dict[task.task_id])
 
-        suite_use_reference = use_reference_data
+    elif suite.startswith("expanded-"):
+        try:
+            extra_count = int(suite.split("-", 1)[1])
+        except Exception as exc:
+            raise click.ClickException(f"Invalid expanded suite '{suite}'.") from exc
 
-    elif suite == "expanded":
-        experiment_name = f"expanded-{10}-tool-environment"
+        experiment_name = f"expanded-{extra_count}-tool-environment"
         env_file = Path("envs/tools-environment.yml")
-        relevant_tasks = [
-            task for task in datasets if task.task_id in tools_mapping_dict
-        ]
+        relevant_tasks = [task for task in datasets if task.task_id in tools_mapping_dict]
         system_prompt_name = "v2"
 
         def _tool_names(task: DataSet) -> Sequence[str]:
@@ -279,56 +272,26 @@ def run_environment(
                 for tool in tools
                 if tool not in base_tools
             ]
-            extra_tools = random.sample(other_tools, 10)
+            if not other_tools:
+                return tuple(base_tools)
+            sample_count = min(extra_count, len(other_tools))
+            extra_tools = random.sample(other_tools, sample_count)
             return tuple(base_tools + extra_tools)
 
-        suite_use_reference = use_reference_data
-
-    elif suite == "expanded":
-        experiment_name = f"expanded-{20}-tool-environment"
-        env_file = Path("envs/tools-environment.yml")
-        relevant_tasks = [
-            task for task in datasets if task.task_id in tools_mapping_dict
-        ]
-        system_prompt_name = "v2"
-
-        def _tool_names(task: DataSet) -> Sequence[str]:
-            base_tools = tools_mapping_dict[task.task_id]
-            other_tools = [
-                tool
-                for key, tools in tools_mapping_dict.items()
-                if key != task.task_id
-                for tool in tools
-                if tool not in base_tools
-            ]
-            extra_tools = random.sample(other_tools, 20)
-            return tuple(base_tools + extra_tools)
-
-        suite_use_reference = use_reference_data
-
-    elif suite == "expanded":
-        experiment_name = f"expanded-{30}-tool-environment"
-        env_file = Path("envs/tools-environment.yml")
-        relevant_tasks = [
-            task for task in datasets if task.task_id in tools_mapping_dict
-        ]
-        system_prompt_name = "v2"
-
-        def _tool_names(task: DataSet) -> Sequence[str]:
-            base_tools = tools_mapping_dict[task.task_id]
-            other_tools = [
-                tool
-                for key, tools in tools_mapping_dict.items()
-                if key != task.task_id
-                for tool in tools
-                if tool not in base_tools
-            ]
-            extra_tools = random.sample(other_tools, 30)
-            return tuple(base_tools + extra_tools)
-
-        suite_use_reference = use_reference_data
     else:
-        raise ValueError(f"Unknown suite '{suite}'")
+        raise click.ClickException(f"Unknown suite '{suite}'")
+
+    if RUN_LOGS is None:
+        raise click.ClickException("RUN_LOGS is not configured. Did you run via main()?")
+
+    if task_ids:
+        wanted = set(task_ids)
+        relevant_tasks = [task for task in relevant_tasks if task.task_id in wanted]
+        missing = sorted(wanted - {task.task_id for task in relevant_tasks})
+        if missing:
+            raise click.ClickException(
+                "Unknown/unavailable task_ids for this suite: " + ", ".join(missing)
+            )
 
     otel_root = RUN_LOGS / "otel"
     otel_root.mkdir(parents=True, exist_ok=True)
@@ -338,7 +301,7 @@ def run_environment(
         return _build_run_config(
             task=task,
             system_prompt_name=system_prompt_name,
-            use_reference_data=suite_use_reference,
+            use_reference_data=use_reference_data,
             run_logs=RUN_LOGS,
             experiment_name=experiment_name,
             model=model_name,
@@ -346,21 +309,14 @@ def run_environment(
         )
 
     logging.info("Starting shared OTEL sink on %s.", OTEL_SINK_HOST)
-    with run_otel_module(
-        host=OTEL_SINK_HOST,
-        ndjson_path=str(otel_root.resolve()),
-        mode="multi",
-    ):
+    with run_otel_module(host=OTEL_SINK_HOST, ndjson_path=str(otel_root.resolve()), mode="multi"):
         completed = _execute_tasks_in_env(
             tasks=relevant_tasks,
             env_file=env_file,
-            max_workers=max_workers,
             build_run_config=_build,
         )
-    click.echo(
-        f"Completed {completed}/{total_tasks} tasks for suite '{suite}' with model '{model_name}'."
-    )
 
+    click.echo(f"Completed {completed}/{total_tasks} tasks for suite '{suite}' with model '{model_name}'.")
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
@@ -373,13 +329,8 @@ def run_environment(
 @click.option(
     "--reference-mode",
     type=click.Choice(["with", "without"], case_sensitive=False),
-)
-@click.option(
-    "--max-workers",
-    type=click.IntRange(1, None),
-    default=4,
+    default="without",
     show_default=True,
-    help="Maximum number of tasks to run concurrently.",
 )
 @click.option(
     "--model",
@@ -387,30 +338,38 @@ def run_environment(
     multiple=True,
     help="Repeat to run only the provided model names (defaults to all).",
 )
+@click.option(
+    "--task-id",
+    "task_ids",
+    multiple=True,
+    help="Repeat to run only the provided task ids (defaults to all tasks in the suite).",
+)
 def main(
     suite: str,
     reference_mode: str,
-    max_workers: int,
     models: tuple[str, ...],
+    task_ids: tuple[str, ...],
 ) -> None:
+    configure_logging()
     _ensure_required_env_vars()
 
     suite = suite.lower()
     reference_mode = reference_mode.lower()
 
-    selected_models = list(models) if models else MODELS
+    global RUN_LOGS
+    RUN_LOGS = Path(os.getenv("RUN_LOGS"))
 
-    use_reference = False
-    if reference_mode == "with":
-        use_reference = True
+    selected_models = list(models) if models else MODELS
+    use_reference = reference_mode == "with"
 
     for model in selected_models:
         run_environment(
             suite=suite,
             model_name=model,
             use_reference_data=use_reference,
-            max_workers=max_workers,
+            task_ids=task_ids or None,
         )
+
 
 if __name__ == "__main__":
     main()
