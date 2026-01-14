@@ -50,7 +50,7 @@ def _build_run_config(
 ) -> RunConfig:
     timestamp = datetime.now()
 
-    otel_sink_host = otel_sink_host or "127.0.0.1:4317"
+    otel_sink_host = otel_sink_host or OTEL_SINK_HOST
     run_hash = str(uuid.uuid4())
     run_root = run_logs / experiment_name / task.task_id / run_hash
     metadata_path = run_logs / "runs" / f"{run_hash}.json"
@@ -412,17 +412,17 @@ def run_environment(
             experiment_name=experiment_name,
             model=model_name,
             tool_names=_tool_names(task),
+            otel_sink_host=OTEL_SINK_HOST,
         )
 
-    logging.info("Starting shared OTEL sink on %s.", OTEL_SINK_HOST)
-    with run_otel_module(host=OTEL_SINK_HOST, ndjson_path=str(otel_root.resolve()), mode="multi"):
-        timeout_seconds = None if timeout_hours <= 0 else timeout_hours * 3600
-        completed = _execute_tasks_in_env(
-            tasks=relevant_tasks,
-            env_file=env_file,
-            build_run_config=_build,
-            timeout_seconds=timeout_seconds,
-        )
+    logging.info("Using external OTEL sink on %s.", OTEL_SINK_HOST)
+    timeout_seconds = None if timeout_hours <= 0 else timeout_hours * 3600
+    completed = _execute_tasks_in_env(
+        tasks=relevant_tasks,
+        env_file=env_file,
+        build_run_config=_build,
+        timeout_seconds=timeout_seconds,
+    )
 
     click.echo(f"Completed {completed}/{total_tasks} tasks for suite '{suite}' with model '{model_name}'.")
 

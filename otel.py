@@ -4,8 +4,11 @@ Minimal OTLP gRPC log sink for Codex.
 Accepts OTLP/gRPC logs on <host>:<port> and appends newline-delimited JSON.
 This is NOT a full collector; it's perfect for local capture/analysis.
 
-Run as a module:
+Run as a module (single run):
   python -m otel --host 127.0.0.1:4317 --path /path/to/out.ndjson
+
+Multi-run (per run_hash file in a directory):
+  python -m otel --host 127.0.0.1:4317 --path /path/to/otel-dir --mode multi
 """
 
 from __future__ import annotations
