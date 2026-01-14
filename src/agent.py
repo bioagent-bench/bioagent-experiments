@@ -247,7 +247,9 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
                     "--profile",
                     run_config.model,
                     "--skip-git-repo-check",
-                    "--yolo",
+                    "--yolo"
+                    "--sandbox" 
+                    "workspace-write",
                 ],
                 env=process_env,
             )

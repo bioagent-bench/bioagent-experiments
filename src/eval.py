@@ -15,12 +15,15 @@ from src.logs import RunConfig, configure_logging
 
 configure_logging()
 
-api_key_path = PROJECT_ROOT / ".keys" / "azure_api.key"
+api_key_path = PROJECT_ROOT / ".keys" / "openrouter_api.key"
 openai_api_key = api_key_path.read_text()
-openai_api_url = PROJECT_ROOT / ".keys" / "azure_endpoint.key"
+openai_api_url = PROJECT_ROOT / ".keys" / "openrouter_endpoint.key"
 openai_api_url = openai_api_url.read_text()
 
-openai_client = OpenAI(api_key=openai_api_key, base_url=openai_api_url)
+openai_client = OpenAI(
+    api_key=openai_api_key, 
+    base_url=openai_api_url
+    )
 
 def run_eval(run_config: RunConfig):
     agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "outputs")
@@ -39,12 +42,14 @@ def run_eval(run_config: RunConfig):
 
     logging.info(f"\t\tRunning judge LLM to evaluate the results")
     if run_config.task_id == "giab":
+        logging.info(f"\t\tEvaluating GIAB metrics")
         agent_results = eval_giab_metrics(
             agent_results_dir=run_config.run_dir_path / "results",
             truth_dir=run_config.data_path / "results",
             input_bed=run_config.data_path / "data" / "Agilent_v7.chr.bed",
             ref_fasta=run_config.data_path / "reference" / "Homo_sapiens_assembly38.fasta",
         )        
+        logging.info("Finished evaluating GIAB metrics")
         
         
         judge_prompt = build_judge_prompt_giab(
@@ -56,8 +61,8 @@ def run_eval(run_config: RunConfig):
             task_id=run_config.task_id,
         )
         response = openai_client.responses.parse(
-            model="gpt-5.1",
-            reasoning={"effort": "high"},
+            model="openai/gpt-5.1",
+            reasoning={"effort": "medium"},
             text_format=EvaluationResultsGiabSchema,
             input=judge_prompt
         )
@@ -84,7 +89,7 @@ def run_eval(run_config: RunConfig):
             task_id=run_config.task_id,
         )
         response = openai_client.responses.parse(
-            model="gpt-5.1",
+            model="openai/gpt-5.1",
             reasoning={"effort": "medium"},
             text_format=EvaluationResultsGiabSchema,
             input=judge_prompt
