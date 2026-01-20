@@ -19,3 +19,6 @@ test_outputs/
 run-logs/*
 
 node_modules/
+
+runs-models
+results
