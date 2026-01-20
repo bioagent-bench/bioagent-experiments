@@ -223,7 +223,7 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         logging.debug(f"Starting codex execution at {start_time}")
         process_env = _build_subprocess_env(run_config)
         
-        if run_config.model in ("claude-opus-4-5", "claude-sonnet-4-5"):
+        if run_config.model.startswith("claude"):
             # this enables the claude mcp server
             if not run_config.experiment_name.startswith("open-environment"):
                 modify_claude_config(run_config.experiment_name, tools_json)
@@ -247,13 +247,12 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
                     "--profile",
                     run_config.model,
                     "--skip-git-repo-check",
-                    "--yolo"
                     "--sandbox" 
                     "workspace-write",
                 ],
                 env=process_env,
             )
-        else:
+        elif run_config.model.startswith("openrouter"):
             subprocess.run(
                 [
                     "opencode",
