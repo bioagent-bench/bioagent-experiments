@@ -1,0 +1,5 @@
+model,completion_rate
+gpt-5-2,92.5
+gpt-gemini,96.57142857142857
+gpt-opus,100.0
+gpt-sonnet,92.5

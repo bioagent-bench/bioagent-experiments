@@ -1,0 +1,6 @@
+model,completion_rate
+gpt-glm,82.5
+openrouter/minimax/minimax-m2.1,73.58333333333333
+openrouter/mistralai/devstral-2512:free,65.0
+openrouter/moonshotai/kimi-k2-thinking,80.5
+openrouter/qwen/qwen3-coder:free,68.63636363636364
