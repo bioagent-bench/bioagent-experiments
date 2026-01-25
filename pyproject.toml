@@ -20,6 +20,7 @@ dependencies = [
     "toml>=0.10.2",
     "pandas>=2.3.3",
     "seaborn>=0.13.2",
+    "openpyxl>=3.1.5",
 ]
 
 [tool.uv.workspace]
