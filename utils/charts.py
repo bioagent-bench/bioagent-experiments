@@ -57,6 +57,7 @@ def load_runs_data(runs_dir: Path) -> list[dict]:
             model = run["model"]
             eval_results = run["eval_results"]
             task_id = run["task_id"]
+            run_hash = run["run_hash"]
             use_reference_data = run["use_reference_data"]
             experiment_name = run["experiment_name"]
             completion_rate = (
@@ -69,6 +70,7 @@ def load_runs_data(runs_dir: Path) -> list[dict]:
                 {
                     "model": model,
                     "task_id": task_id,
+                    "run_hash": run_hash,
                     "use_reference_data": use_reference_data,
                     "experiment_name": experiment_name,
                     "steps_completed": eval_results["steps_completed"],
@@ -128,5 +130,11 @@ df_bloat = load_runs_data(Path('./runs-bloat/'))
 df_corrupt = load_runs_data(Path('./runs-corrupt/'))
 
 df_decoy = load_runs_data(Path('./runs-decoy'))
+print(df_decoy["run_hash", "task_id"])
 
 df_stability = load_runs_data(Path('./runs-stability'))
+df_stability = df_stability.loc[df_stability["model"] == 'gpt-5-2']
+df_stability[["run_hash", "model", "task_id"]].to_csv('stability-logs.csv')
+
+df_stability = df_stability.loc[df_stability["task_id"] == 'alzheimer-mouse']
+# print(df_stability['run_hash'])
