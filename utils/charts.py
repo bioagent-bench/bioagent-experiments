@@ -36,36 +36,52 @@ harness_model_map = {
 }
 
 closed_models_filter = ["gemini", "opus", "sonnet", "gpt-5.2"]
-rows = []
-for i in runs_dir.glob("*.json"):
-    with i.open() as f:
-        run = json.load(f)
-        model = run["model"]
-        eval_results = run["eval_results"]
-        task_id = run["task_id"]
-        use_reference_data = run["use_reference_data"]
-        experiment_name = run["experiment_name"]
-        completion_rate = (
-            eval_results["steps_completed"] / eval_results["steps_to_completion"]
-        )
-        completion_rate_adj = (
-            eval_results["steps_completed"] + eval_results["final_result_reached"]
-        ) / (eval_results["steps_to_completion"] + 1)
-        rows.append(
-            {
-                "model": model,
-                "task_id": task_id,
-                "use_reference_data": use_reference_data,
-                "experiment_name": experiment_name,
-                "steps_completed": eval_results["steps_completed"],
-                "final_result_reached": eval_results["final_result_reached"],
-                "steps_to_completion": eval_results["steps_to_completion"],
-                "completion_rate": completion_rate,
-                "adjusted_completion_rate": completion_rate_adj,
-            }
-        )
 
-df = pd.DataFrame(rows)
+
+def load_runs_data(runs_dir: Path) -> list[dict]:
+    """Load and process run data from JSON files.
+    
+    Args:
+        runs_dir: Path to directory containing run JSON files.
+    
+    Returns:
+        List of dictionaries containing processed run data with keys:
+        model, task_id, use_reference_data, experiment_name, steps_completed,
+        final_result_reached, steps_to_completion, completion_rate,
+        adjusted_completion_rate.
+    """
+    rows = []
+    for i in runs_dir.glob("*.json"):
+        with i.open() as f:
+            run = json.load(f)
+            model = run["model"]
+            eval_results = run["eval_results"]
+            task_id = run["task_id"]
+            use_reference_data = run["use_reference_data"]
+            experiment_name = run["experiment_name"]
+            completion_rate = (
+                eval_results["steps_completed"] / eval_results["steps_to_completion"]
+            )
+            completion_rate_adj = (
+                eval_results["steps_completed"] + eval_results["final_result_reached"]
+            ) / (eval_results["steps_to_completion"] + 1)
+            rows.append(
+                {
+                    "model": model,
+                    "task_id": task_id,
+                    "use_reference_data": use_reference_data,
+                    "experiment_name": experiment_name,
+                    "steps_completed": eval_results["steps_completed"],
+                    "final_result_reached": eval_results["final_result_reached"],
+                    "steps_to_completion": eval_results["steps_to_completion"],
+                    "completion_rate": completion_rate,
+                    "adjusted_completion_rate": completion_rate_adj,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+df = load_runs_data(runs_dir)
 df = df.loc[df["experiment_name"] == "open-environment-with-reference-data"]
 
 # add harness table
@@ -105,3 +121,12 @@ best_open_models_df.to_csv("results/best_open_models_completion_rate.csv")
 # best results by harness
 best_harness_df = df.groupby("harness")
 print(best_harness_df.head())
+
+"""ablation"""
+df_bloat = load_runs_data(Path('./runs-bloat/'))
+
+df_corrupt = load_runs_data(Path('./runs-corrupt/'))
+
+df_decoy = load_runs_data(Path('./runs-decoy'))
+
+df_stability = load_runs_data(Path('./runs-stability'))

@@ -23,4 +23,4 @@ node_modules/
 ablation/corrupt/data
 ablation/decoys/data
 
-runs-models
+runs-*
