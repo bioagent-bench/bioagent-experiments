@@ -58,3 +58,8 @@ You can run this before running experiments to check if model connections work
 ```bash
 python test_coding_framework_configs.py 
 ```
+
+
+## Ablation
+Type-1 = Corrupt
+Type-2 = Decoy

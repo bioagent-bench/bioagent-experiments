@@ -20,7 +20,6 @@ run-logs/*
 
 node_modules/
 
-ablation/corrupt/data
-ablation/decoys/data
+ablation/
 
 runs-*
