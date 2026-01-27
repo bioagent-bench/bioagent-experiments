@@ -22,64 +22,25 @@ DATA_ROOT = Path("~/bioagent-data").expanduser()
 PLAN_SCHEMA = """{
   "task_id": "string",
   "objective": "string",
-  "stages": [
-    {
-      "id": "S1",
-      "name": "stage name",
-      "goal": "stage goal"
-    }
-  ],
   "steps": [
     {
-      "id": "S1_step",
-      "stage": "stage_id",
-      "goal": "step goal",
-      "inputs": ["input1", "input2"],
-      "outputs": ["output1"],
-      "key_decisions": [
-        {"name": "decision_name", "options": ["opt1", "opt2"], "rationale": "why"}
-      ],
-      "checks": [
-        {
-          "name": "check_name",
-          "pass_condition": "what must be true",
-          "evidence": "artifact or metric"
-        }
-      ],
-      "failure_modes": [
-        {
-          "symptom": "what goes wrong",
-          "likely_causes": ["cause1", "cause2"],
-          "mitigation": "how to fix"
-        }
-      ]
+      "step": "high-level step summary",
+      "rationale": "why this step matters",
+      "tool": "tool or system used"
     }
-  ],
-  "final_artifact": {
-    "type": "csv",
-    "schema": [{"col": "column", "type": "string", "required": true}],
-    "acceptance_criteria": ["criterion1", "criterion2"]
-  },
-  "assumptions": ["assumption1"],
-  "constraints": ["constraint1"],
-  "non_goals": ["non_goal1"]
+  ]
 }"""
 
-class StageSchema(BaseModel):
-    id: str
-    name: str
-    goal: str
+class PlanStepSchema(BaseModel):
+    step: str
+    rationale: str
+    tool: str
 
 
 class PlanSchema(BaseModel):
     task_id: str
     objective: str
-    stages: list[StageSchema]
-    steps: list[dict[str, Any]] = Field(default_factory=list)
-    final_artifact: dict[str, Any] = Field(default_factory=dict)
-    assumptions: list[str] = Field(default_factory=list)
-    constraints: list[str] = Field(default_factory=list)
-    non_goals: list[str] = Field(default_factory=list)
+    steps: list[PlanStepSchema] = Field(default_factory=list)
 
 
 def glob_input_data(*input_dirs: Path) -> list[Path]:
@@ -94,7 +55,7 @@ def glob_input_data(*input_dirs: Path) -> list[Path]:
 
 def build_plan_prompt(task_id: str, task_prompt: str, input_data: Sequence[Path]) -> str:
     input_list = json.dumps([str(path) for path in input_data], ensure_ascii=True)
-    return f"""You are a model for planning bioinformatics pipelines. Use the task prompt and input data to produce a pipeline plan.
+    return f"""You are a model for planning bioinformatics pipelines. Use the task prompt and input data to produce a high-level overview plan.
 Return ONLY a JSON object matching the PipelinePlanSpec schema below. No markdown, no extra text.
 All keys must be present. Use empty lists/objects when needed. Use double quotes for all strings.
 
@@ -174,9 +135,9 @@ def _model_slug(model: str) -> str:
 
 
 def write_plan(model: str, task_id: str, plan: dict) -> Path:
-    plan_root = RUN_LOGS / "plans" / _model_slug(model) / task_id
+    plan_root = RUN_LOGS / "plans" / _model_slug(model)
     plan_root.mkdir(parents=True, exist_ok=True)
-    plan_path = plan_root / f"{uuid.uuid4()}.json"
+    plan_path = plan_root / f"{task_id}_{uuid.uuid4()}.json"
     plan_path.write_text(json.dumps(plan, indent=2, ensure_ascii=True))
     return plan_path
 
