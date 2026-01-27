@@ -1,7 +1,7 @@
 MODELS = [
     # open
-    "openrouter/qwen/qwen3-coder:free",
-    "openrouter/mistralai/devstral-2512:free",
+    "openrouter/qwen/qwen3-coder",
+    "openrouter/mistralai/devstral-2512",
     "openrouter/moonshotai/kimi-k2-thinking",
     "openrouter/minimax/minimax-m2.1",
     "openrouter/z-ai/glm-4.7",
