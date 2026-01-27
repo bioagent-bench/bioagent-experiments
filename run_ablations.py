@@ -20,8 +20,8 @@ from src.logs import RunConfig, configure_logging
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DATA_ROOT = Path("/home/dionizije/bioagent-data")
-METADATA_PATH = Path("/home/dionizije/bioagent-bench/src/task_metadata.json")
+DATA_ROOT = Path("~/bioagent-data").expanduser()
+METADATA_PATH = Path("~/bioagent-bench/src/task_metadata.json").expanduser()
 
 OTEL_SINK_HOST = "127.0.0.1:4317"
 REQUIRED_ENV_VARS = ("RUN_LOGS",)

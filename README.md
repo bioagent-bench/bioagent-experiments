@@ -32,11 +32,6 @@ export AZURE_OPENAI_API_KEY=""
 export ANTHROPIC_FOUNDRY_API_KEY=""
 ```
 
-3. Install bioinformatics-mcp package
-```bash
-uv pip install -e /home/dionizije/bioinformatics-mcp 
-```
-
 4. Install a mamba/micromamba installation to run bioinformatics-mcp from the agent
 5. Install an isolated hap.py mamba environment to run germline variant calling bnechmarking
 ```bash

@@ -16,9 +16,9 @@ def modify_codex_config(username: str, tools_config: Path) -> None:
 
     # Completely replace the bioinformatics MCP block
     mcp_block: dict[str, Any] = {
-        "command": "/home/dionizije/.local/share/mamba/envs/bioinformatics-mcp/bin/python",
+        "command": "~/.local/share/mamba/envs/bioinformatics-mcp/bin/python",
         "args": [
-            "/home/dionizije/bioinformatics-mcp/mcp_server.py",
+            "~/bioinformatics-mcp/mcp_server.py",
             "--no-dashboard",
             "--user",
             username,
@@ -62,8 +62,8 @@ def modify_claude_config(username: str, tools_config: Path) -> None:
             "stdio",
             "bioinformatics-mcp",
             "--",
-            "/home/dionizije/.local/share/mamba/envs/bioinformatics-mcp/bin/python",
-            "/home/dionizije/bioinformatics-mcp/mcp_server.py",
+            "~/.local/share/mamba/envs/bioinformatics-mcp/bin/python",
+            "~/bioinformatics-mcp/mcp_server.py",
             "--no-dashboard",
             "--user",
             username,

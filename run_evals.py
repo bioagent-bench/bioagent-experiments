@@ -25,8 +25,8 @@ OTEL_SINK_HOST = "127.0.0.1:4317"
 PROJECT_ROOT = Path(__file__).resolve().parent
 # Populated in main() after validating environment variables.
 RUN_LOGS: Path | None = None
-METADATA_PATH = Path("/home/dionizije/bioagent-bench/src/task_metadata.json")
-DATA_ROOT = Path("/home/dionizije/bioagent-data")
+METADATA_PATH = Path("~/bioagent-bench/src/task_metadata.json").expanduser()
+DATA_ROOT = Path("~/bioagent-data").expanduser()
 REQUIRED_ENV_VARS = ("RUN_LOGS", "OPENROUTER_API_KEY")
 
 

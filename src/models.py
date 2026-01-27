@@ -10,7 +10,7 @@ MODELS = [
     "openrouter/google/gemini-3-pro-preview",
     "claude-opus-4-5",
     "claude-sonnet-4-5",
-    "gpt-5-1-codex-max"
+    "gpt-5-1-codex-max",
 
     # gpt prefix runs the above models in codex cli
     "gpt-minimax",
