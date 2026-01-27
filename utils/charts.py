@@ -122,19 +122,29 @@ best_open_models_df.to_csv("results/best_open_models_completion_rate.csv")
 
 # best results by harness
 best_harness_df = df.groupby("harness")
-print(best_harness_df.head())
 
-"""ablation"""
+"""perturbation"""
+
+# calculate difference from prompt bloated to regular runs
 df_bloat = load_runs_data(Path('./runs-bloat/'))
+gpt_5 = df[df["model"] == "gpt-5-2"][['task_id', 'completion_rate']]
+bloat = df_bloat[['task_id', 'completion_rate']]
+cmp = gpt_5.merge(
+    bloat,
+    on="task_id",
+    how="outer",
+    suffixes=("_base", "_bloat")
+)
+cmp["delta"] = (cmp["completion_rate_bloat"] - cmp["completion_rate_base"]) * 100
+print(cmp["delta"].mean())
+cmp.to_csv('results/prompt_bloat_delta.csv')
 
+# corrupt data
 df_corrupt = load_runs_data(Path('./runs-corrupt/'))
-
 df_decoy = load_runs_data(Path('./runs-decoy'))
-print(df_decoy["run_hash", "task_id"])
-
 df_stability = load_runs_data(Path('./runs-stability'))
-df_stability = df_stability.loc[df_stability["model"] == 'gpt-5-2']
+
 df_stability[["run_hash", "model", "task_id"]].to_csv('stability-logs.csv')
 
-df_stability = df_stability.loc[df_stability["task_id"] == 'alzheimer-mouse']
-# print(df_stability['run_hash'])
+df_stability = df_stability.loc[df_stability["model"] == "gpt-5-2"]
+df_stability = df_stability.loc[df_stability["task_id"] == 'transcript-quant']
