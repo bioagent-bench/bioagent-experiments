@@ -1,0 +1,11 @@
+,task_id,completion_rate_base,completion_rate_bloat,delta
+0,alzheimer-mouse,1.0,0.875,-12.5
+1,comparative-genomics,1.0,0.8,-19.999999999999996
+2,cystic-fibrosis,1.0,1.0,0.0
+3,deseq,1.0,0.0,-100.0
+4,evolution,0.25,1.0,75.0
+5,giab,1.0,0.8,-19.999999999999996
+6,metagenomics,1.0,0.0,-100.0
+7,single-cell,1.0,0.0,-100.0
+8,transcript-quant,1.0,1.0,0.0
+9,viral-metagenomics,1.0,1.0,0.0
