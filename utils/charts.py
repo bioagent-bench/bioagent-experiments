@@ -1,6 +1,7 @@
 from pathlib import Path
 import json
 import pandas as pd
+import matplotlib.pyplot as plt
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 runs_dir = BASE_DIR / "runs-models"
@@ -87,12 +88,92 @@ df = load_runs_data(runs_dir)
 df = df.loc[df["experiment_name"] == "open-environment-with-reference-data"]
 
 # add harness table
-df["harness"] = "unknown"
-df.loc[df["model"].str.startswith("openrouter/"), "harness"] = "opencode"
-df.loc[df["model"].str.startswith("claude"), "harness"] = "claude"
-df.loc[df["model"].str.startswith("gpt-"), "harness"] = "codex"
+harness_by_model = {
+    model: harness
+    for harness, models in harness_model_map.items()
+    for model in models
+}
+df["harness"] = df["model"].map(harness_by_model)
+df.loc[df["harness"].isna() & df["model"].str.startswith("openrouter/"), "harness"] = "opencode"
+df.loc[df["harness"].isna() & df["model"].str.startswith("claude"), "harness"] = "claude-code"
+df.loc[df["harness"].isna() & df["model"].str.startswith("gpt-"), "harness"] = "codex-cli"
+df = df.loc[df["harness"].notna()]
 
-df = df.loc[df["harness"] != "unknown"]
+harness_display_labels = {
+    "codex-cli": "Codex CLI",
+    "claude-code": "Claude Code",
+    "opencode": "OpenCode",
+}
+harness_order = list(harness_model_map.keys())
+harness_task_df = (
+    df.groupby(["task_id", "harness"])["completion_rate"].mean().reset_index()
+)
+harness_task_df["completion_rate"] *= 100
+harness_task_pivot = harness_task_df.pivot(
+    index="task_id",
+    columns="harness",
+    values="completion_rate",
+).reindex(columns=harness_order)
+harness_task_pivot = harness_task_pivot.sort_index()
+harness_task_pivot.index.name = "task_id"
+harness_means = harness_task_pivot.mean().to_frame().T
+harness_means.index = ["mean"]
+harness_table_df = pd.concat([harness_task_pivot, harness_means])
+harness_table_df = harness_table_df.rename(columns=harness_display_labels)
+
+table_path = BASE_DIR / "results" / "harness_success_by_task.tex"
+table_path.parent.mkdir(parents=True, exist_ok=True)
+harness_table_df.to_latex(
+    table_path,
+    float_format="%.1f",
+    na_rep="--",
+    caption="Harness success rate by task (completion rate \\%).",
+    label="tab:harness-success-by-task",
+)
+
+model_summary = (
+    df.groupby(["model", "harness"])["completion_rate"].mean().reset_index()
+)
+model_summary = model_summary.loc[model_summary["harness"].isin(harness_order)]
+model_summary["completion_rate"] *= 100
+model_summary["label"] = model_summary["model"].str.split("/").str[-1]
+harness_positions = {harness: idx for idx, harness in enumerate(harness_order)}
+model_summary["x"] = model_summary["harness"].map(harness_positions)
+
+fig, ax = plt.subplots(figsize=(10.8, 6.2))
+for harness, group in model_summary.groupby("harness"):
+    ax.scatter(
+        group["x"],
+        group["completion_rate"],
+        s=45,
+        alpha=0.85,
+        edgecolor="#333333",
+        linewidth=0.4,
+        label=harness_display_labels.get(harness, harness),
+    )
+    for _, row in group.iterrows():
+        ax.text(
+            row["x"] + 0.01,
+            row["completion_rate"],
+            row["label"],
+            fontsize=7,
+            ha="left",
+            va="center",
+        )
+ax.set_ylabel("Completion rate (%)")
+ax.set_ylim(0, 100)
+ax.set_xlabel("")
+ax.set_axisbelow(True)
+for y in [0, 20, 40, 60, 80]:
+    ax.axhline(y, color="#666666", linestyle="--", linewidth=0.6, alpha=0.5)
+ax.set_xlim(-0.5, len(harness_order) - 0.5)
+ax.set_xticks(list(harness_positions.values()))
+ax.set_xticklabels([harness_display_labels.get(h, h) for h in harness_order])
+plt.setp(ax.get_xticklabels(), rotation=8, ha="center")
+fig.tight_layout()
+plot_path = BASE_DIR / "results" / "harness_success_rate.pdf"
+fig.savefig(plot_path, format="pdf", bbox_inches="tight")
+plt.close(fig)
 
 best_closed_models = [
     "gpt-opus",
@@ -119,6 +200,51 @@ best_open_models_df = (
 )
 best_closed_models_df.to_csv("results/best_closed_models_completion_rate.csv")
 best_open_models_df.to_csv("results/best_open_models_completion_rate.csv")
+
+combined_df = pd.concat(
+    [
+        best_closed_models_df.rename("completion_rate")
+        .reset_index()
+        .assign(weight_type="closed"),
+        best_open_models_df.rename("completion_rate")
+        .reset_index()
+        .assign(weight_type="open"),
+    ],
+    ignore_index=True,
+)
+combined_df["label"] = combined_df["model"].str.split("/").str[-1]
+label_categories = [
+    model.split("/")[-1] for model in best_closed_models + best_open_models
+]
+combined_df["label"] = pd.Categorical(
+    combined_df["label"],
+    categories=label_categories,
+    ordered=True,
+)
+combined_df = combined_df.sort_values("label")
+
+colors = {"open": "#1f77b4", "closed": "#d62728"}
+bar_colors = [colors[wt] for wt in combined_df["weight_type"]]
+
+fig, ax = plt.subplots(figsize=(7.2, 3.4))
+ax.bar(combined_df["label"], combined_df["completion_rate"], color=bar_colors)
+ax.set_ylabel("Completion rate (%)")
+ax.set_ylim(0, 100)
+ax.set_xlabel("")
+ax.set_axisbelow(True)
+for y in [0, 20, 40, 60, 80]:
+    ax.axhline(y, color="#666666", linestyle="--", linewidth=0.6, alpha=0.5)
+plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
+legend_handles = [
+    plt.Line2D([0], [0], color=colors["open"], lw=6, label="Open weights"),
+    plt.Line2D([0], [0], color=colors["closed"], lw=6, label="Closed weights"),
+]
+ax.legend(handles=legend_handles, frameon=False, loc="upper right")
+fig.tight_layout()
+output_path = BASE_DIR / "results" / "open_closed_completion_rate.pdf"
+output_path.parent.mkdir(parents=True, exist_ok=True)
+fig.savefig(output_path, format="pdf", bbox_inches="tight")
+plt.close(fig)
 
 # best results by harness
 best_harness_df = df.groupby("harness")
