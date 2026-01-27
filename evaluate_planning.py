@@ -10,10 +10,14 @@ from typing import Any, Iterable, Sequence
 
 from openai import OpenAI
 from pydantic import BaseModel, Field
+from src import models
 from src.dataset import DataSet
 from src.models import MODELS
 
 PROJECT_ROOT = Path(__file__).resolve().parent
+RUN_LOGS = Path(os.getenv("RUN_LOGS"))
+METADATA_PATH = Path("~/bioagent-bench/src/task_metadata.json").expanduser()
+DATA_ROOT = Path("~/bioagent-data").expanduser()
 
 PLAN_SCHEMA = """{
   "task_id": "string",
@@ -134,9 +138,11 @@ def _read_optional_text(path: Path) -> str | None:
 
 
 def create_openai_client() -> OpenAI:
-    api_key = PROJECT_ROOT / ".keys" / "openrouter_api.key"
-    base_url = PROJECT_ROOT / ".keys" / "openrouter_endpoint.key"
-    return OpenAI(api_key=api_key, base_url=base_url)
+    api_key_path = PROJECT_ROOT / ".keys" / "openrouter_api.key"
+    api_key = api_key_path.read_text()
+    api_url = PROJECT_ROOT / ".keys" / "openrouter_endpoint.key"
+    api_url = api_url.read_text()
+    return OpenAI(api_key=api_key, base_url=api_url)
 
 
 def _plan_to_dict(plan: PlanSchema | dict[str, Any]) -> dict[str, Any]:
@@ -152,7 +158,7 @@ def run_planner(openai_client: OpenAI, model: str, prompt: str) -> dict[str, Any
         model=model,
         messages=[{"role": "user", "content": prompt}],
         response_format=PlanSchema,
-        reasoning={"effort": "high"},
+        # reasoning={"effort": "high"},
     )
     message = response.choices[0].message
     parsed = getattr(message, "parsed", None)
@@ -167,8 +173,8 @@ def _model_slug(model: str) -> str:
     return model.replace("/", "_").replace(":", "_")
 
 
-def write_plan(run_logs: Path, model: str, task_id: str, plan: dict) -> Path:
-    plan_root = run_logs / "plans" / _model_slug(model) / task_id
+def write_plan(model: str, task_id: str, plan: dict) -> Path:
+    plan_root = RUN_LOGS / "plans" / _model_slug(model) / task_id
     plan_root.mkdir(parents=True, exist_ok=True)
     plan_path = plan_root / f"{uuid.uuid4()}.json"
     plan_path.write_text(json.dumps(plan, indent=2, ensure_ascii=True))
@@ -179,37 +185,29 @@ def _filter_tasks(tasks: Iterable[DataSet], task_ids: Sequence[str]) -> list[Dat
     if not task_ids:
         return list(tasks)
     wanted = set(task_ids)
-    return [task for task in tasks if task.task_id in wanted]
-    return parser.parse_args()
 
 
 def main() -> None:
-    run_logs = Path(args.run_logs)
-    use_reference_data = args.reference_mode == "with"
-    selected_models = args.models if args.models else MODELS
     openai_client = create_openai_client()
 
-    datasets = DataSet.load_all(
-        metadata_path=str(args.metadata_path),
-        data_root=str(args.data_root),
-    )
-    tasks = _filter_tasks(datasets, args.task_ids or [])
-
-    for task in tasks:
+    datasets = DataSet.load_all(metadata_path=str(METADATA_PATH), data_root=str(DATA_ROOT))
+    for task in list(datasets):
         if not task.path:
             continue
         data_root = Path(task.path)
         data_dir = data_root / "data"
         reference_dir = data_root / "reference"
-        if use_reference_data:
-            input_data = glob_input_data(data_dir, reference_dir)
-        else:
-            input_data = glob_input_data(data_dir)
+        input_data = glob_input_data(data_dir, reference_dir)
 
         prompt = build_plan_prompt(task.task_id, task.task_prompt, input_data)
-        for model in selected_models:
-            plan = run_planner(openai_client, model, prompt)
-            write_plan(run_logs, model, task.task_id, plan)
+        print(prompt)
+        for model in MODELS:
+            print(model)
+            if model.startswith('openrouter'):
+                model_name = model[len('openrouter/'):]
+                print("Running planner")
+                plan = run_planner(openai_client, model_name, prompt)
+                write_plan(model, task.task_id, plan)
 
 
 if __name__ == "__main__":
