@@ -6,6 +6,10 @@ import matplotlib.pyplot as plt
 BASE_DIR = Path(__file__).resolve().parent.parent
 runs_dir = BASE_DIR / "runs-models"
 
+AXIS_LABEL_SIZE = 14
+TICK_LABEL_SIZE = 12
+ANNOTATION_SIZE = 10
+
 models = {}
 harness_model_map = {
     "codex-cli": [
@@ -121,16 +125,6 @@ harness_means.index = ["mean"]
 harness_table_df = pd.concat([harness_task_pivot, harness_means])
 harness_table_df = harness_table_df.rename(columns=harness_display_labels)
 
-table_path = BASE_DIR / "results" / "harness_success_by_task.tex"
-table_path.parent.mkdir(parents=True, exist_ok=True)
-harness_table_df.to_latex(
-    table_path,
-    float_format="%.1f",
-    na_rep="--",
-    caption="Harness success rate by task (completion rate \\%).",
-    label="tab:harness-success-by-task",
-)
-
 model_summary = (
     df.groupby(["model", "harness"])["completion_rate"].mean().reset_index()
 )
@@ -156,14 +150,15 @@ for harness, group in model_summary.groupby("harness"):
             row["x"] + 0.01,
             row["completion_rate"],
             row["label"],
-            fontsize=7,
+            fontsize=ANNOTATION_SIZE,
             ha="left",
             va="center",
         )
-ax.set_ylabel("Completion rate (%)")
+ax.set_ylabel("Completion rate (%)", fontsize=AXIS_LABEL_SIZE)
 ax.set_ylim(0, 100)
 ax.set_xlabel("")
 ax.set_axisbelow(True)
+ax.tick_params(labelsize=TICK_LABEL_SIZE)
 for y in [0, 20, 40, 60, 80]:
     ax.axhline(y, color="#666666", linestyle="--", linewidth=0.6, alpha=0.5)
 ax.set_xlim(-0.5, len(harness_order) - 0.5)
@@ -198,8 +193,8 @@ best_closed_models_df = (
 best_open_models_df = (
     best_open_models_df.groupby("model")["completion_rate"].mean() * 100
 )
-best_closed_models_df.to_csv("results/best_closed_models_completion_rate.csv")
-best_open_models_df.to_csv("results/best_open_models_completion_rate.csv")
+best_closed_models_df.to_csv("results/data/best_closed_models_completion_rate.csv")
+best_open_models_df.to_csv("results/data/best_open_models_completion_rate.csv")
 
 combined_df = pd.concat(
     [
@@ -223,23 +218,19 @@ combined_df["label"] = pd.Categorical(
 )
 combined_df = combined_df.sort_values("label")
 
-colors = {"open": "#1f77b4", "closed": "#d62728"}
+colors = {"closed": "#2b6cb0", "open": "#2f855a"}
 bar_colors = [colors[wt] for wt in combined_df["weight_type"]]
 
 fig, ax = plt.subplots(figsize=(7.2, 3.4))
 ax.bar(combined_df["label"], combined_df["completion_rate"], color=bar_colors)
-ax.set_ylabel("Completion rate (%)")
+ax.set_ylabel("Completion rate (%)", fontsize=AXIS_LABEL_SIZE)
 ax.set_ylim(0, 100)
 ax.set_xlabel("")
 ax.set_axisbelow(True)
+ax.tick_params(labelsize=TICK_LABEL_SIZE)
 for y in [0, 20, 40, 60, 80]:
     ax.axhline(y, color="#666666", linestyle="--", linewidth=0.6, alpha=0.5)
 plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
-legend_handles = [
-    plt.Line2D([0], [0], color=colors["open"], lw=6, label="Open weights"),
-    plt.Line2D([0], [0], color=colors["closed"], lw=6, label="Closed weights"),
-]
-ax.legend(handles=legend_handles, frameon=False, loc="upper right")
 fig.tight_layout()
 output_path = BASE_DIR / "results" / "open_closed_completion_rate.pdf"
 output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -263,7 +254,7 @@ cmp = gpt_5.merge(
 )
 cmp["delta"] = (cmp["completion_rate_bloat"] - cmp["completion_rate_base"]) * 100
 print(cmp["delta"].mean())
-cmp.to_csv('results/prompt_bloat_delta.csv')
+cmp.to_csv('results/data/prompt_bloat_delta.csv')
 
 # corrupt data
 df_corrupt = load_runs_data(Path('./runs-corrupt/'))

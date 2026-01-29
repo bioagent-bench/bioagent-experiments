@@ -24,3 +24,5 @@ ablation/
 
 runs-*
 stability-results
+plan_evals/
+.DS_Store
