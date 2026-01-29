@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -166,7 +167,7 @@ ax.set_xticks(list(harness_positions.values()))
 ax.set_xticklabels([harness_display_labels.get(h, h) for h in harness_order])
 plt.setp(ax.get_xticklabels(), rotation=8, ha="center")
 fig.tight_layout()
-plot_path = BASE_DIR / "results" / "harness_success_rate.pdf"
+plot_path = BASE_DIR / "results" / "charts/harness_success_rate.pdf"
 fig.savefig(plot_path, format="pdf", bbox_inches="tight")
 plt.close(fig)
 
@@ -232,8 +233,55 @@ for y in [0, 20, 40, 60, 80]:
     ax.axhline(y, color="#666666", linestyle="--", linewidth=0.6, alpha=0.5)
 plt.setp(ax.get_xticklabels(), rotation=30, ha="right")
 fig.tight_layout()
-output_path = BASE_DIR / "results" / "open_closed_completion_rate.pdf"
+output_path = BASE_DIR / "results" / "charts/open_closed_completion_rate.pdf"
 output_path.parent.mkdir(parents=True, exist_ok=True)
+fig.savefig(output_path, format="pdf", bbox_inches="tight")
+plt.close(fig)
+
+best_models = best_closed_models + best_open_models
+best_task_model_df = (
+    df.loc[df["model"].isin(best_models)]
+    .groupby(["task_id", "model"])["completion_rate"]
+    .mean()
+    .mul(100)
+    .reset_index()
+)
+best_task_model_pivot = best_task_model_df.pivot(
+    index="task_id",
+    columns="model",
+    values="completion_rate",
+).reindex(columns=best_models)
+best_task_model_pivot = best_task_model_pivot.sort_index()
+best_task_model_pivot.index.name = "task_id"
+
+task_data_path = BASE_DIR / "results" / "data" / "best_models_task_completion_rate.csv"
+task_data_path.parent.mkdir(parents=True, exist_ok=True)
+best_task_model_pivot.to_csv(task_data_path)
+
+task_labels = best_task_model_pivot.index.tolist()
+model_labels = [model.split("/")[-1] for model in best_task_model_pivot.columns]
+values = best_task_model_pivot.to_numpy(dtype=float)
+masked_values = np.ma.masked_invalid(values)
+cmap = plt.get_cmap("YlGnBu").copy()
+cmap.set_bad("#f0f0f0")
+
+width = max(8, 0.6 * len(model_labels) + 3)
+height = max(4.5, 0.45 * len(task_labels) + 2.5)
+fig, ax = plt.subplots(figsize=(width, height))
+im = ax.imshow(masked_values, aspect="auto", cmap=cmap, vmin=0, vmax=100)
+ax.set_xlabel("Model", fontsize=AXIS_LABEL_SIZE)
+ax.set_ylabel("Task", fontsize=AXIS_LABEL_SIZE)
+ax.set_xticks(range(len(model_labels)))
+ax.set_xticklabels(
+    model_labels, rotation=30, ha="right", fontsize=TICK_LABEL_SIZE
+)
+ax.set_yticks(range(len(task_labels)))
+ax.set_yticklabels(task_labels, fontsize=TICK_LABEL_SIZE)
+cbar = fig.colorbar(im, ax=ax)
+cbar.set_label("Completion rate (%)", fontsize=AXIS_LABEL_SIZE)
+cbar.ax.tick_params(labelsize=TICK_LABEL_SIZE)
+fig.tight_layout()
+output_path = BASE_DIR / "results" / "charts/best_models_task_completion_rate.pdf"
 fig.savefig(output_path, format="pdf", bbox_inches="tight")
 plt.close(fig)
 
