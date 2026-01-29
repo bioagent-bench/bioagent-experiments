@@ -7,9 +7,9 @@ import matplotlib.pyplot as plt
 BASE_DIR = Path(__file__).resolve().parent.parent
 runs_dir = BASE_DIR / "runs-models"
 
-AXIS_LABEL_SIZE = 14
-TICK_LABEL_SIZE = 12
-ANNOTATION_SIZE = 10
+AXIS_LABEL_SIZE = 15
+TICK_LABEL_SIZE = 13
+ANNOTATION_SIZE = 11
 
 models = {}
 harness_model_map = {
@@ -137,6 +137,53 @@ harness_data_path.parent.mkdir(parents=True, exist_ok=True)
 model_summary[["model", "label", "harness", "completion_rate"]].to_csv(
     harness_data_path, index=False
 )
+summarized_models = (
+    "opus",
+    "sonnet",
+    "5-1",
+    "5-1-codex",
+    "5-1-codex-max",
+    "5-2",
+    "devstral",
+    "gemini",
+    "glm",
+    "kimi",
+    "minimax",
+    "qwen",
+)
+# if it has openrouter in name it needs to go in opencode harness
+# if it has gpt in name it needs to go into codex-cli harness score
+summary_match_order = sorted(summarized_models, key=len, reverse=True)
+
+
+def summarize_model_label(model_name: str) -> str | None:
+    normalized = model_name.lower().replace(".", "-")
+    for label in summary_match_order:
+        if label in normalized:
+            return label
+    return None
+
+
+summary_df = df.assign(summary_label=df["model"].map(summarize_model_label))
+summary_df = summary_df.loc[summary_df["summary_label"].notna()].copy()
+summary_table = (
+    summary_df.groupby(["summary_label", "harness"])["completion_rate"]
+    .mean()
+    .reset_index()
+)
+summary_table["completion_rate"] *= 100
+harness_model_table = (
+    summary_table.pivot(
+        index="summary_label", columns="harness", values="completion_rate"
+    )
+    .reindex(columns=harness_order)
+    .reindex(summarized_models)
+    .reset_index()
+    .rename(columns={"summary_label": "model"})
+)
+print(harness_model_table)
+harness_model_path = BASE_DIR / "results" / "data" / "harness_success_rate_by_model.csv"
+harness_model_table.to_csv(harness_model_path, index=False, float_format="%.2f")
 harness_positions = {harness: idx for idx, harness in enumerate(harness_order)}
 model_summary["x"] = model_summary["harness"].map(harness_positions)
 
@@ -152,10 +199,11 @@ for harness, group in model_summary.groupby("harness"):
         label=harness_display_labels.get(harness, harness),
     )
     for _, row in group.iterrows():
-        ax.text(
-            row["x"] + 0.01,
-            row["completion_rate"],
+        ax.annotate(
             row["label"],
+            xy=(row["x"], row["completion_rate"]),
+            xytext=(8, 0),
+            textcoords="offset points",
             fontsize=ANNOTATION_SIZE,
             ha="left",
             va="center",
@@ -170,7 +218,7 @@ for y in [0, 20, 40, 60, 80]:
 ax.set_xlim(-0.5, len(harness_order) - 0.5)
 ax.set_xticks(list(harness_positions.values()))
 ax.set_xticklabels([harness_display_labels.get(h, h) for h in harness_order])
-plt.setp(ax.get_xticklabels(), rotation=8, ha="center")
+plt.setp(ax.get_xticklabels(), rotation=0, ha="center")
 fig.tight_layout()
 plot_path = BASE_DIR / "results" / "charts/harness_success_rate.pdf"
 fig.savefig(plot_path, format="pdf", bbox_inches="tight")

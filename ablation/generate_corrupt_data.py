@@ -13,9 +13,22 @@ def generate_gene_table(n_rows: int = 12, seed: int = 0):
     rng = np.random.default_rng(seed)
 
     cols = [
-        "", "gene_id", "gene_name", "feature", "fc", "log2fc", "pval", "qval",
-        "wt.MeanFPKM", "tg.MeanFPKM",
-        "FPKM.tau_02", "FPKM.tau_03", "FPKM.tau_04", "FPKM.tau_01", "FPKM.tau_05", "FPKM.tau_06"
+        "",
+        "gene_id",
+        "gene_name",
+        "feature",
+        "fc",
+        "log2fc",
+        "pval",
+        "qval",
+        "wt.MeanFPKM",
+        "tg.MeanFPKM",
+        "FPKM.tau_02",
+        "FPKM.tau_03",
+        "FPKM.tau_04",
+        "FPKM.tau_01",
+        "FPKM.tau_05",
+        "FPKM.tau_06",
     ]
 
     idx_col = np.arange(1, n_rows + 1)
@@ -58,7 +71,7 @@ def generate_gene_table(n_rows: int = 12, seed: int = 0):
     }
 
     df = pd.DataFrame(data, columns=cols)
-    df.to_csv('DEA_PS3O1.csv')
+    df.to_csv("DEA_PS3O1.csv")
 
 
 def corrupt_seq_to_ns(seq: str, rng: random.Random) -> str:
@@ -74,12 +87,14 @@ def corrupt_seq_to_ns(seq: str, rng: random.Random) -> str:
     to_n = set(idxs[:k])
     return "".join("N" if i in to_n else seq[i] for i in range(L))
 
+
 from pathlib import Path
 import random
 import tempfile
 import os
 import shutil
 import gzip
+
 
 def generate_corrupt_fastq():
     fastq_dir = Path("~/bioagent-experiments/ablation/corrupt/data/deseq/").expanduser()
@@ -111,9 +126,10 @@ def generate_corrupt_fastq():
         rng = random.Random()
         out_path = out_dir / in_path.name
 
-        with in_path.open("r", encoding="utf-8", errors="replace") as fin, \
-             out_path.open("w", encoding="utf-8") as fout:
-
+        with (
+            in_path.open("r", encoding="utf-8", errors="replace") as fin,
+            out_path.open("w", encoding="utf-8") as fout,
+        ):
             rec = 0
             while True:
                 h = fin.readline()
@@ -123,18 +139,24 @@ def generate_corrupt_fastq():
                 p = fin.readline()
                 q = fin.readline()
                 if not (s and p and q):
-                    raise ValueError(f"Truncated FASTQ record in {in_path} at record {rec+1}")
+                    raise ValueError(
+                        f"Truncated FASTQ record in {in_path} at record {rec + 1}"
+                    )
 
                 if not h.startswith("@"):
-                    raise ValueError(f"Invalid FASTQ header in {in_path} at record {rec+1}: {h[:50]!r}")
+                    raise ValueError(
+                        f"Invalid FASTQ header in {in_path} at record {rec + 1}: {h[:50]!r}"
+                    )
                 if not p.startswith("+"):
-                    raise ValueError(f"Invalid FASTQ plus-line in {in_path} at record {rec+1}: {p[:50]!r}")
+                    raise ValueError(
+                        f"Invalid FASTQ plus-line in {in_path} at record {rec + 1}: {p[:50]!r}"
+                    )
 
                 s_stripped = s.rstrip("\n")
                 q_stripped = q.rstrip("\n")
                 if len(s_stripped) != len(q_stripped):
                     raise ValueError(
-                        f"Length mismatch in {in_path} at record {rec+1}: "
+                        f"Length mismatch in {in_path} at record {rec + 1}: "
                         f"seq={len(s_stripped)} qual={len(q_stripped)}"
                     )
 
@@ -149,8 +171,11 @@ def generate_corrupt_fastq():
 
         print(f"Wrote corrupted copy: {out_path}")
 
-    print(f"\nDone. Corrupted FASTQs are in: {out_dir}\n"
-          f"Point your experiment at that directory to use the junk reads.")
+    print(
+        f"\nDone. Corrupted FASTQs are in: {out_dir}\n"
+        f"Point your experiment at that directory to use the junk reads."
+    )
+
 
 def generate_corrupt_fastq_gz():
     in_dir = Path("~/bioagent-experiments/ablation/corrupt/data/evolution").expanduser()
@@ -171,7 +196,7 @@ def generate_corrupt_fastq_gz():
         to_n = set(idxs[:k])
         return "".join("N" if i in to_n else seq[i] for i in range(L))
 
-    files = sorted([f for f in in_dir.glob("*.fastq.gz") if 'anc' in f.name])
+    files = sorted([f for f in in_dir.glob("*.fastq.gz") if "anc" in f.name])
     if not files:
         raise FileNotFoundError(f"No *.fastq.gz files found in {in_dir}")
 
@@ -179,9 +204,12 @@ def generate_corrupt_fastq_gz():
         out_path = out_dir / in_path.name
         rng = random.Random()
 
-        with gzip.open(in_path, "rt", encoding="utf-8", errors="replace", newline="") as fin, \
-             gzip.open(out_path, "wt", encoding="utf-8", newline="\n") as fout:
-
+        with (
+            gzip.open(
+                in_path, "rt", encoding="utf-8", errors="replace", newline=""
+            ) as fin,
+            gzip.open(out_path, "wt", encoding="utf-8", newline="\n") as fout,
+        ):
             rec = 0
             while True:
                 h = fin.readline()
@@ -191,7 +219,9 @@ def generate_corrupt_fastq_gz():
                 p = fin.readline()
                 q = fin.readline()
                 if not (s and p and q):
-                    raise ValueError(f"Truncated FASTQ record in {in_path} at record {rec+1}")
+                    raise ValueError(
+                        f"Truncated FASTQ record in {in_path} at record {rec + 1}"
+                    )
 
                 h = h.rstrip("\n")
                 s = s.rstrip("\n")
@@ -199,12 +229,16 @@ def generate_corrupt_fastq_gz():
                 q = q.rstrip("\n")
 
                 if not h.startswith("@"):
-                    raise ValueError(f"Invalid FASTQ header in {in_path} at record {rec+1}: {h[:60]!r}")
+                    raise ValueError(
+                        f"Invalid FASTQ header in {in_path} at record {rec + 1}: {h[:60]!r}"
+                    )
                 if not p.startswith("+"):
-                    raise ValueError(f"Invalid FASTQ plus-line in {in_path} at record {rec+1}: {p[:60]!r}")
+                    raise ValueError(
+                        f"Invalid FASTQ plus-line in {in_path} at record {rec + 1}: {p[:60]!r}"
+                    )
                 if len(s) != len(q):
                     raise ValueError(
-                        f"Length mismatch in {in_path} at record {rec+1}: seq={len(s)} qual={len(q)}"
+                        f"Length mismatch in {in_path} at record {rec + 1}: seq={len(s)} qual={len(q)}"
                     )
 
                 s_cor = corrupt_seq_to_ns(s, rng)
@@ -218,8 +252,10 @@ def generate_corrupt_fastq_gz():
 
         print(f"Wrote corrupted copy: {out_path}")
 
-    print(f"\nDone. Corrupted FASTQ.GZ files are in: {out_dir}\n"
-          f"Point your pipeline at that directory to use the junk reads.")
+    print(
+        f"\nDone. Corrupted FASTQ.GZ files are in: {out_dir}\n"
+        f"Point your pipeline at that directory to use the junk reads."
+    )
 
 
 def generate_corrupt_fq(path):
@@ -249,9 +285,12 @@ def generate_corrupt_fq(path):
         out_path = out_dir / in_path.name
         rng = random.Random()
 
-        with gzip.open(in_path, "rt", encoding="utf-8", errors="replace", newline="") as fin, \
-             gzip.open(out_path, "wt", encoding="utf-8", newline="\n") as fout:
-
+        with (
+            gzip.open(
+                in_path, "rt", encoding="utf-8", errors="replace", newline=""
+            ) as fin,
+            gzip.open(out_path, "wt", encoding="utf-8", newline="\n") as fout,
+        ):
             rec = 0
             while True:
                 h = fin.readline()
@@ -261,7 +300,9 @@ def generate_corrupt_fq(path):
                 p = fin.readline()
                 q = fin.readline()
                 if not (s and p and q):
-                    raise ValueError(f"Truncated FASTQ record in {in_path} at record {rec+1}")
+                    raise ValueError(
+                        f"Truncated FASTQ record in {in_path} at record {rec + 1}"
+                    )
 
                 h = h.rstrip("\n")
                 s = s.rstrip("\n")
@@ -269,12 +310,16 @@ def generate_corrupt_fq(path):
                 q = q.rstrip("\n")
 
                 if not h.startswith("@"):
-                    raise ValueError(f"Invalid FASTQ header in {in_path} at record {rec+1}: {h[:60]!r}")
+                    raise ValueError(
+                        f"Invalid FASTQ header in {in_path} at record {rec + 1}: {h[:60]!r}"
+                    )
                 if not p.startswith("+"):
-                    raise ValueError(f"Invalid FASTQ plus-line in {in_path} at record {rec+1}: {p[:60]!r}")
+                    raise ValueError(
+                        f"Invalid FASTQ plus-line in {in_path} at record {rec + 1}: {p[:60]!r}"
+                    )
                 if len(s) != len(q):
                     raise ValueError(
-                        f"Length mismatch in {in_path} at record {rec+1}: seq={len(s)} qual={len(q)}"
+                        f"Length mismatch in {in_path} at record {rec + 1}: seq={len(s)} qual={len(q)}"
                     )
 
                 s_cor = corrupt_seq_to_ns(s, rng)
@@ -288,8 +333,10 @@ def generate_corrupt_fq(path):
 
         print(f"Wrote corrupted copy: {out_path}")
 
-    print(f"\nDone. Corrupted FASTQ.GZ files are in: {out_dir}\n"
-          f"Point your pipeline at that directory to use the junk reads.")
+    print(
+        f"\nDone. Corrupted FASTQ.GZ files are in: {out_dir}\n"
+        f"Point your pipeline at that directory to use the junk reads."
+    )
 
 
 def generate_corrupt_single_cell():
@@ -309,7 +356,11 @@ def generate_corrupt_single_cell():
       - MatrixMarket coordinate format uses 1-based indices; we keep them unchanged.
       - Many 10x mtx are declared 'integer'; using an int constant is safest.
     """
-    in_dir = Path("~/bioagent-experiments/ablation/corrupt/data/single-cell").expanduser().resolve()
+    in_dir = (
+        Path("~/bioagent-experiments/ablation/corrupt/data/single-cell")
+        .expanduser()
+        .resolve()
+    )
 
     pattern = "*_matrix.mtx"
     mtx_files = sorted(in_dir.glob(pattern))
@@ -319,9 +370,10 @@ def generate_corrupt_single_cell():
     for in_path in mtx_files:
         out_path = in_dir / "corrupted" / in_path.name
 
-        with in_path.open("r", encoding="utf-8", errors="replace") as fin, \
-             out_path.open("w", encoding="utf-8", newline="\n") as fout:
-
+        with (
+            in_path.open("r", encoding="utf-8", errors="replace") as fin,
+            out_path.open("w", encoding="utf-8", newline="\n") as fout,
+        ):
             header = fin.readline()
             if not header.startswith("%%MatrixMarket"):
                 raise ValueError(f"{in_path} does not start with a MatrixMarket header")
@@ -359,13 +411,14 @@ def generate_corrupt_single_cell():
         print(f"Wrote: {out_path}")
 
 
-
-if __name__=="__main__":
-    # generate_gene_table()
-    # generate_corrupt_fastq()
-    # generate_corrupt_fastq_gz()
-    # generate_corrupt_fq("~/bioagent-experiments/ablation/corrupt/data/giab")
-    # generate_corrupt_fq("~/bioagent-experiments/ablation/corrupt/data/metagenomics")
-    # generate_corrupt_single_cell()
-    # generate_corrupt_fq("~/bioagent-experiments/ablation/corrupt/data/transcript-quant")
-    generate_corrupt_fq("/home/dionizije/bioagent-experiments/ablation/corrupt/data/viral-metagenomics")
+if __name__ == "__main__":
+    generate_gene_table()
+    generate_corrupt_fastq()
+    generate_corrupt_fastq_gz()
+    generate_corrupt_fq("~/bioagent-experiments/ablation/corrupt/data/giab")
+    generate_corrupt_fq("~/bioagent-experiments/ablation/corrupt/data/metagenomics")
+    generate_corrupt_single_cell()
+    generate_corrupt_fq("~/bioagent-experiments/ablation/corrupt/data/transcript-quant")
+    generate_corrupt_fq(
+        "~/bioagent-experiments/ablation/corrupt/data/viral-metagenomics"
+    )

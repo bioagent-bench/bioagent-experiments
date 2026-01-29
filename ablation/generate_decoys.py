@@ -330,7 +330,7 @@ def generate_transcriptome_decoy(
 def generate_cell_label_decoys(
 ) -> None:
     import pandas as pd
-    df = pd.read_excel("/home/dionizije/bioagent-data/single-cell/reference/Cell_marker_Seq.xlsx")
+    df = pd.read_excel("~/bioagent-data/single-cell/reference/Cell_marker_Seq.xlsx")
     required = ["species", "tissue_class", "tissue_type"]
     missing = [c for c in required if c not in df.columns]
     if missing:
