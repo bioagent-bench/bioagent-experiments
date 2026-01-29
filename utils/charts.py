@@ -132,6 +132,11 @@ model_summary = (
 model_summary = model_summary.loc[model_summary["harness"].isin(harness_order)]
 model_summary["completion_rate"] *= 100
 model_summary["label"] = model_summary["model"].str.split("/").str[-1]
+harness_data_path = BASE_DIR / "results" / "data" / "harness_success_rate.csv"
+harness_data_path.parent.mkdir(parents=True, exist_ok=True)
+model_summary[["model", "label", "harness", "completion_rate"]].to_csv(
+    harness_data_path, index=False
+)
 harness_positions = {harness: idx for idx, harness in enumerate(harness_order)}
 model_summary["x"] = model_summary["harness"].map(harness_positions)
 
