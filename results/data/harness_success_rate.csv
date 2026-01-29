@@ -21,5 +21,6 @@ openrouter/minimax/minimax-m2.1,minimax-m2.1,opencode,73.58333333333333
 openrouter/mistralai/devstral-2512:free,devstral-2512:free,opencode,65.0
 openrouter/moonshotai/kimi-k2-thinking,kimi-k2-thinking,opencode,80.5
 openrouter/openai/gpt-5.2,gpt-5.2,opencode,87.5
+openrouter/qwen/qwen3-coder-30b-a3b-instruct,qwen3-coder-30b-a3b-instruct,opencode,0.0
 openrouter/qwen/qwen3-coder:free,qwen3-coder:free,opencode,68.63636363636364
 openrouter/z-ai/glm-4.7,glm-4.7,opencode,75.0

@@ -259,6 +259,31 @@ best_task_model_pivot = best_task_model_df.pivot(
 best_task_model_pivot = best_task_model_pivot.sort_index()
 best_task_model_pivot.index.name = "task_id"
 
+all_models = (
+    df[["model", "harness"]]
+    .drop_duplicates()
+    .assign(harness_order=lambda frame: frame["harness"].map(harness_positions))
+    .sort_values(["harness_order", "model"])
+    ["model"]
+    .tolist()
+)
+all_task_model_df = (
+    df.groupby(["task_id", "model"])["completion_rate"].mean().mul(100).reset_index()
+)
+all_task_model_pivot = all_task_model_df.pivot(
+    index="task_id",
+    columns="model",
+    values="completion_rate",
+).reindex(columns=all_models)
+all_task_model_pivot = all_task_model_pivot.sort_index()
+all_task_model_pivot.index.name = "task_id"
+
+all_task_data_path = (
+    BASE_DIR / "results" / "data" / "all_models_task_completion_rate.csv"
+)
+all_task_data_path.parent.mkdir(parents=True, exist_ok=True)
+all_task_model_pivot.to_csv(all_task_data_path)
+
 task_data_path = BASE_DIR / "results" / "data" / "best_models_task_completion_rate.csv"
 task_data_path.parent.mkdir(parents=True, exist_ok=True)
 best_task_model_pivot.to_csv(task_data_path)
