@@ -2,8 +2,8 @@
 
 ## Environment Setup
 
-The evaluation system uses isolated mamba environments for each run. The LLM is provided with
-Python and R installations from the start.
+All experiments execute inside Docker containers. Host-side scripts still orchestrate runs,
+but the agent itself always runs in Docker.
 
 ## Requirements
 ### Miniforge installation for mamba
@@ -48,25 +48,28 @@ python run_evals.py --suite open --reference-mode with
 2. src/eval.py
 3. evaluate_run_db.py
 
-## Docker (optional)
+## Docker (required)
 Build the image once:
 ```bash
 docker build -t bioagent-experiments:latest .
 ```
 
-Run the agent inside Docker:
+Run the agent (Docker is always used):
 ```bash
-python -m src.agent --config /path/to/run.json --docker --docker-image bioagent-experiments:latest
+python -m src.agent --config /path/to/run.json --docker-image bioagent-experiments:latest
 ```
 
 Or via environment variables:
 ```bash
-BIOAGENT_RUN_IN_DOCKER=1 BIOAGENT_DOCKER_IMAGE=bioagent-experiments:latest \\
+BIOAGENT_DOCKER_IMAGE=bioagent-experiments:latest \\
   python -m src.agent --config /path/to/run.json
 ```
 
 If you use an OTEL sink running on the host, the container defaults to
 `host.docker.internal:4317`. Override with `BIOAGENT_OTEL_HOST` if needed.
+
+After each run, the agent automatically triggers three ablations in separate Docker
+containers: prompt-bloat, decoy, and corrupt.
 
 ## Run tests for models
 You can run this before running experiments to check if model connections work

@@ -6,7 +6,9 @@ import os
 import shutil
 import subprocess
 import time
+import uuid
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -17,11 +19,14 @@ from .system_prompts import prompts
 
 configure_logging()
 
-DOCKER_RUN_FLAG = "BIOAGENT_RUN_IN_DOCKER"
 DOCKER_IMAGE_ENV = "BIOAGENT_DOCKER_IMAGE"
 IN_DOCKER_FLAG = "BIOAGENT_IN_DOCKER"
 OTEL_HOST_ENV = "BIOAGENT_OTEL_HOST"
 DEFAULT_DOCKER_IMAGE = "bioagent-experiments:latest"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ABLATION_ROOT = PROJECT_ROOT / "ablation"
+PROMPT_BLOAT_PATH = ABLATION_ROOT / "prompt_bloat.py"
+ABLATION_SETTINGS = ("prompt-bloat", "decoy", "corrupt")
 
 
 def _flag_enabled(value: str | None) -> bool:
@@ -78,7 +83,6 @@ def _docker_env_vars(run_config: RunConfig) -> dict[str, str]:
         if key in passthrough_keys or key.startswith("OTEL_"):
             env[key] = value
 
-    env.pop(DOCKER_RUN_FLAG, None)
     env.pop(IN_DOCKER_FLAG, None)
 
     otel_host = run_config.otel_sink_host or ""
@@ -90,13 +94,14 @@ def _docker_env_vars(run_config: RunConfig) -> dict[str, str]:
     return env
 
 
-def _build_docker_command(config_path: Path, run_config: RunConfig, image: str) -> list[str]:
+def _build_docker_command(
+    config_path: Path, run_config: RunConfig, image: str
+) -> list[str]:
     if shutil.which("docker") is None:
         raise RuntimeError("Docker is required but was not found on PATH.")
 
-    project_root = Path(__file__).resolve().parents[1]
     mounts: set[Path] = {
-        _mount_dir_for(project_root),
+        _mount_dir_for(PROJECT_ROOT),
         _mount_dir_for(run_config.data_path),
         _mount_dir_for(run_config.run_dir_path),
         _mount_dir_for(run_config.metadata_path),
@@ -112,7 +117,7 @@ def _build_docker_command(config_path: Path, run_config: RunConfig, image: str) 
         "--add-host",
         "host.docker.internal:host-gateway",
         "-w",
-        str(project_root),
+        str(PROJECT_ROOT),
         "-e",
         f"{IN_DOCKER_FLAG}=1",
     ]
@@ -139,14 +144,6 @@ def _run_in_docker(config_path: Path, image: str | None) -> None:
     subprocess.run(cmd, check=True)
 
 
-def _should_run_in_docker(args: argparse.Namespace) -> bool:
-    if args.docker or args.docker_image:
-        return True
-    if _flag_enabled(os.getenv(DOCKER_RUN_FLAG)):
-        return True
-    return bool(os.getenv(DOCKER_IMAGE_ENV))
-
-
 def load_run_config(config_path: Path) -> RunConfig:
     """Load a ``RunConfig`` instance from a metadata JSON file.
 
@@ -161,6 +158,220 @@ def load_run_config(config_path: Path) -> RunConfig:
     run_config.num_tools = len(run_config.tool_names)
 
     return run_config
+
+
+def _infer_run_logs(run_config: RunConfig) -> Path:
+    try:
+        return run_config.run_dir_path.parents[2]
+    except IndexError:
+        pass
+    try:
+        return run_config.metadata_path.parent.parent
+    except IndexError as exc:
+        raise ValueError("Unable to infer RUN_LOGS from run configuration.") from exc
+
+
+def _prepare_run_config(run_config: RunConfig) -> None:
+    run_config.run_dir_path.mkdir(parents=True, exist_ok=True)
+    run_config.otel_sink_path.parent.mkdir(parents=True, exist_ok=True)
+    run_config.save_run_metadata()
+
+
+def _copy_inputs_to_directory(
+    source_root: Path,
+    destination_root: Path,
+    use_reference_data: bool,
+) -> None:
+    destination_root.mkdir(parents=True, exist_ok=True)
+    source = Path(source_root)
+    if not source.exists():
+        return
+
+    excluded_names: set[str] = {"results"}
+    if not use_reference_data:
+        excluded_names.add("reference")
+
+    for item in source.iterdir():
+        if item.name in excluded_names:
+            continue
+        target = destination_root / item.name
+        if item.is_dir():
+            shutil.copytree(item, target, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, target)
+
+
+def _overlay_directory(source_root: Path, destination_root: Path) -> None:
+    source = Path(source_root)
+    if not source.exists():
+        return
+    for item in source.rglob("*"):
+        if item.is_dir():
+            continue
+        rel_path = item.relative_to(source)
+        target = destination_root / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(item, target)
+
+
+def _prepare_ablation_inputs(
+    run_config: RunConfig,
+    ablation_mode: str,
+    use_reference_data: bool,
+    ablation_root: Path,
+) -> Path:
+    source_root = Path(run_config.data_path)
+    if not source_root.exists():
+        raise FileNotFoundError(f"Input data directory does not exist: {source_root}")
+
+    staging_root = run_config.run_dir_path / "source_inputs"
+    if staging_root.exists():
+        shutil.rmtree(staging_root)
+
+    _copy_inputs_to_directory(source_root, staging_root, use_reference_data)
+
+    if ablation_mode == "corrupt":
+        override_root = ablation_root / "corrupt" / "data" / run_config.task_id
+    elif ablation_mode == "decoy":
+        override_root = ablation_root / "decoys" / "data" / run_config.task_id
+    else:
+        raise ValueError(f"Unknown ablation mode '{ablation_mode}'.")
+
+    if not override_root.exists():
+        raise FileNotFoundError(
+            f"Ablation data not found for '{run_config.task_id}' at {override_root}"
+        )
+
+    _overlay_directory(override_root, staging_root / "data")
+    return staging_root
+
+
+def _load_prompt_bloat_map(prompt_path: Path) -> dict[str, str]:
+    import importlib.util
+
+    if not prompt_path.exists():
+        raise FileNotFoundError(f"Prompt bloat file not found at {prompt_path}")
+
+    spec = importlib.util.spec_from_file_location("prompt_bloat", prompt_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Failed to load prompt bloat module from {prompt_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    if not hasattr(module, "bloats"):
+        raise RuntimeError(
+            "Prompt bloat module does not contain 'bloats' dictionary."
+        )
+
+    mapping: dict[str, str] = {}
+    for label, content in module.bloats.items():
+        task_id = label.strip().lower().replace("_", "-")
+        mapping[task_id] = content.strip()
+    return mapping
+
+
+def _build_ablation_run_config(
+    base_config: RunConfig,
+    experiment_name: str,
+    task_prompt: str | None = None,
+    data_path: Path | None = None,
+) -> RunConfig:
+    run_logs = _infer_run_logs(base_config)
+    run_hash = str(uuid.uuid4())
+    run_root = run_logs / experiment_name / base_config.task_id / run_hash
+    metadata_path = run_logs / "runs" / f"{run_hash}.json"
+    otel_path = run_logs / "otel" / f"otlp-{run_hash}.ndjson"
+
+    return RunConfig(
+        metadata_path=metadata_path,
+        run_hash=run_hash,
+        use_reference_data=base_config.use_reference_data,
+        timestamp=datetime.now(),
+        task_id=base_config.task_id,
+        task_prompt=task_prompt or base_config.task_prompt,
+        num_tools=len(base_config.tool_names),
+        tool_names=list(base_config.tool_names),
+        system_prompt_name=base_config.system_prompt_name,
+        experiment_name=experiment_name,
+        model=base_config.model,
+        run_dir_path=run_root,
+        data_path=data_path or base_config.data_path,
+        otel_sink_host=base_config.otel_sink_host,
+        otel_sink_path=otel_path,
+    )
+
+
+def _run_postrun_ablations(config_path: Path, image: str | None) -> None:
+    base_config = load_run_config(config_path)
+    if base_config.experiment_name.startswith("ablation-"):
+        logging.info(
+            "Skipping ablation chaining for ablation run %s.",
+            base_config.run_hash,
+        )
+        return
+
+    prompt_bloat_map = {}
+    try:
+        prompt_bloat_map = _load_prompt_bloat_map(PROMPT_BLOAT_PATH)
+    except FileNotFoundError:
+        logging.warning("Prompt bloat mapping not found; skipping prompt-bloat run.")
+    except Exception:
+        logging.exception(
+            "Failed to load prompt bloat mapping; skipping prompt-bloat run."
+        )
+
+    for setting in ABLATION_SETTINGS:
+        experiment_name = f"ablation-{setting}"
+        staged_path: Path | None = None
+
+        try:
+            if setting == "prompt-bloat":
+                bloat_text = prompt_bloat_map.get(base_config.task_id)
+                if not bloat_text:
+                    logging.warning(
+                        "No prompt bloat text for task '%s'; skipping prompt-bloat.",
+                        base_config.task_id,
+                    )
+                    continue
+                task_prompt = f"{bloat_text}\n\n{base_config.task_prompt}"
+                ablation_config = _build_ablation_run_config(
+                    base_config=base_config,
+                    experiment_name=experiment_name,
+                    task_prompt=task_prompt,
+                )
+            elif setting in {"decoy", "corrupt"}:
+                ablation_config = _build_ablation_run_config(
+                    base_config=base_config,
+                    experiment_name=experiment_name,
+                )
+                ablation_config.run_dir_path.mkdir(parents=True, exist_ok=True)
+                staged_path = _prepare_ablation_inputs(
+                    run_config=ablation_config,
+                    ablation_mode=setting,
+                    use_reference_data=ablation_config.use_reference_data,
+                    ablation_root=ABLATION_ROOT,
+                )
+                ablation_config.data_path = staged_path
+            else:
+                logging.warning("Unknown ablation setting '%s'; skipping.", setting)
+                continue
+
+            _prepare_run_config(ablation_config)
+            logging.info(
+                "Starting ablation '%s' for task '%s' (run %s).",
+                setting,
+                base_config.task_id,
+                ablation_config.run_hash,
+            )
+            _run_in_docker(ablation_config.metadata_path, image)
+        except Exception:
+            logging.exception(
+                "Ablation '%s' failed for task '%s'.", setting, base_config.task_id
+            )
+        finally:
+            if staged_path and staged_path.exists():
+                shutil.rmtree(staged_path, ignore_errors=True)
 
 
 def create_dirs(prefix: Path) -> None:
@@ -294,6 +505,10 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
     Returns:
         RunConfig: Updated run configuration with evaluation results.
     """
+    if not _is_running_in_docker():
+        raise RuntimeError(
+            "Agent runs must execute inside Docker. Use `python -m src.agent` on the host."
+        )
     inputs_root = Path(run_config.data_path)
     if not inputs_root.exists():
         raise FileNotFoundError(f"Input data directory does not exist: {inputs_root}")
@@ -401,11 +616,6 @@ def parse_args() -> argparse.Namespace:
         help="Path to the serialized RunConfig JSON file.",
     )
     parser.add_argument(
-        "--docker",
-        action="store_true",
-        help="Run the agent inside a Docker container.",
-    )
-    parser.add_argument(
         "--docker-image",
         type=str,
         default=None,
@@ -416,8 +626,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    if _should_run_in_docker(args) and not _is_running_in_docker():
+    if not _is_running_in_docker():
         _run_in_docker(args.config, args.docker_image)
+        _run_postrun_ablations(args.config, args.docker_image)
         return
     run_from_config(args.config)
 
