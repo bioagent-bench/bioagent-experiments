@@ -1,0 +1,34 @@
+.git
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.*
+.vscode
+.idea
+.DS_Store
+
+# Runtime artifacts
+outputs/
+results/
+runs*/
+run*/
+stability-results/
+plan_evals/
+ablation/
+
+# Large data or logs
+stability-logs.csv
+stability-results
+
+# Node artifacts
+node_modules/
+
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+
+# OS-specific
+Thumbs.db

@@ -48,6 +48,26 @@ python run_evals.py --suite open --reference-mode with
 2. src/eval.py
 3. evaluate_run_db.py
 
+## Docker (optional)
+Build the image once:
+```bash
+docker build -t bioagent-experiments:latest .
+```
+
+Run the agent inside Docker:
+```bash
+python -m src.agent --config /path/to/run.json --docker --docker-image bioagent-experiments:latest
+```
+
+Or via environment variables:
+```bash
+BIOAGENT_RUN_IN_DOCKER=1 BIOAGENT_DOCKER_IMAGE=bioagent-experiments:latest \\
+  python -m src.agent --config /path/to/run.json
+```
+
+If you use an OTEL sink running on the host, the container defaults to
+`host.docker.internal:4317`. Override with `BIOAGENT_OTEL_HOST` if needed.
+
 ## Run tests for models
 You can run this before running experiments to check if model connections work
 ```bash

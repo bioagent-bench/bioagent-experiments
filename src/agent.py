@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import os
 import shutil
@@ -12,12 +11,140 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from otel import sum_token_counts
-from src.mcp_configs import modify_claude_config, modify_codex_config, remove_claude_mcp_config, remove_codex_mcp_config
 from .logs import RunConfig, configure_logging
 from .system_prompts import prompts
 
 
 configure_logging()
+
+DOCKER_RUN_FLAG = "BIOAGENT_RUN_IN_DOCKER"
+DOCKER_IMAGE_ENV = "BIOAGENT_DOCKER_IMAGE"
+IN_DOCKER_FLAG = "BIOAGENT_IN_DOCKER"
+OTEL_HOST_ENV = "BIOAGENT_OTEL_HOST"
+DEFAULT_DOCKER_IMAGE = "bioagent-experiments:latest"
+
+
+def _flag_enabled(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_running_in_docker() -> bool:
+    if _flag_enabled(os.getenv(IN_DOCKER_FLAG)):
+        return True
+    return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()
+
+
+def _is_relative_to(child: Path, parent: Path) -> bool:
+    try:
+        child.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def _mount_dir_for(path: Path) -> Path:
+    if path.exists() and path.is_dir():
+        return path
+    if path.suffix:
+        return path.parent
+    return path
+
+
+def _prune_mounts(mounts: set[Path]) -> list[Path]:
+    resolved = [mount.resolve() for mount in mounts]
+    ordered = sorted(resolved, key=lambda p: len(str(p)))
+    result: list[Path] = []
+    for candidate in ordered:
+        if any(_is_relative_to(candidate, existing) for existing in result):
+            continue
+        result.append(candidate)
+    return result
+
+
+def _docker_env_vars(run_config: RunConfig) -> dict[str, str]:
+    passthrough_keys = {
+        "RUN_LOGS",
+        "OPENAI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "AZURE_OPENAI_API_KEY",
+        "AZURE_OPENAI_ENDPOINT",
+        "ANTHROPIC_FOUNDRY_API_KEY",
+        "CODEX_HOME",
+    }
+    env: dict[str, str] = {}
+    for key, value in os.environ.items():
+        if key in passthrough_keys or key.startswith("OTEL_"):
+            env[key] = value
+
+    env.pop(DOCKER_RUN_FLAG, None)
+    env.pop(IN_DOCKER_FLAG, None)
+
+    otel_host = run_config.otel_sink_host or ""
+    if ("127.0.0.1" in otel_host or "localhost" in otel_host) and not env.get(
+        OTEL_HOST_ENV
+    ):
+        env[OTEL_HOST_ENV] = "host.docker.internal:4317"
+
+    return env
+
+
+def _build_docker_command(config_path: Path, run_config: RunConfig, image: str) -> list[str]:
+    if shutil.which("docker") is None:
+        raise RuntimeError("Docker is required but was not found on PATH.")
+
+    project_root = Path(__file__).resolve().parents[1]
+    mounts: set[Path] = {
+        _mount_dir_for(project_root),
+        _mount_dir_for(run_config.data_path),
+        _mount_dir_for(run_config.run_dir_path),
+        _mount_dir_for(run_config.metadata_path),
+        _mount_dir_for(run_config.otel_sink_path),
+    }
+    mounts = _prune_mounts(mounts)
+
+    cmd = [
+        "docker",
+        "run",
+        "--rm",
+        "--init",
+        "--add-host",
+        "host.docker.internal:host-gateway",
+        "-w",
+        str(project_root),
+        "-e",
+        f"{IN_DOCKER_FLAG}=1",
+    ]
+
+    for key, value in _docker_env_vars(run_config).items():
+        cmd.extend(["-e", f"{key}={value}"])
+
+    for mount in mounts:
+        cmd.extend(["-v", f"{mount}:{mount}"])
+
+    codex_home = Path("~/.codex").expanduser()
+    if codex_home.exists():
+        cmd.extend(["-v", f"{codex_home}:/root/.codex"])
+
+    cmd.append(image)
+    cmd.extend(["python", "-m", "src.agent", "--config", str(config_path)])
+    return cmd
+
+
+def _run_in_docker(config_path: Path, image: str | None) -> None:
+    run_config = load_run_config(config_path)
+    docker_image = image or os.getenv(DOCKER_IMAGE_ENV) or DEFAULT_DOCKER_IMAGE
+    cmd = _build_docker_command(config_path, run_config, docker_image)
+    subprocess.run(cmd, check=True)
+
+
+def _should_run_in_docker(args: argparse.Namespace) -> bool:
+    if args.docker or args.docker_image:
+        return True
+    if _flag_enabled(os.getenv(DOCKER_RUN_FLAG)):
+        return True
+    return bool(os.getenv(DOCKER_IMAGE_ENV))
 
 
 def load_run_config(config_path: Path) -> RunConfig:
@@ -171,6 +298,10 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
     if not inputs_root.exists():
         raise FileNotFoundError(f"Input data directory does not exist: {inputs_root}")
 
+    otel_host_override = os.getenv(OTEL_HOST_ENV)
+    if otel_host_override:
+        run_config.otel_sink_host = otel_host_override
+
     run_dir_path = run_config.run_dir_path
     log_path = run_config.metadata_path
 
@@ -206,62 +337,28 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
             + f"\n\nThe input data is: {input_data}"
         )
 
-        if run_config.experiment_name.startswith("open-environment"):
-            # we shouldn't use an old MCP if we run open-environment
-            remove_codex_mcp_config()
-            remove_claude_mcp_config()
-
-        # set the required tools in the MCP
-        else:
-            tools_json = run_config.run_dir_path / "tools.json"
-            tools_json.write_text(json.dumps(run_config.tool_names))
-            logging.debug("Modifying Codex config for enabling tools")
-            modify_codex_config(
-                username=run_config.experiment_name, tools_config=tools_json
-            )
         start_time = time.time()
         logging.debug(f"Starting codex execution at {start_time}")
         process_env = _build_subprocess_env(run_config)
         
-        if run_config.model.startswith("claude"):
-            # this enables the claude mcp server
-            if not run_config.experiment_name.startswith("open-environment"):
-                modify_claude_config(run_config.experiment_name, tools_json)
-            subprocess.run(
-                [
-                    "claude",
-                    "-p",
-                    prompt,
-                    "--model",
-                    run_config.model,
-                    "--dangerously-skip-permissions",
-                ],
-                env=process_env,
+        if not run_config.model.startswith("gpt"):
+            raise ValueError(
+                f"Unsupported model '{run_config.model}'. Only codex-cli profiles are allowed."
             )
-        elif run_config.model.startswith("gpt"):
-            subprocess.run(
-                [
-                    "codex",
-                    "exec",
-                    prompt,
-                    "--profile",
-                    run_config.model,
-                    "--skip-git-repo-check",
-                    "--sandbox" 
-                    "workspace-write",
-                ],
-                env=process_env,
-            )
-        elif run_config.model.startswith("openrouter"):
-            subprocess.run(
-                [
-                    "opencode",
-                    "run",
-                    prompt,
-                    "--model",
-                    run_config.model,
-                ]
-            )
+
+        subprocess.run(
+            [
+                "codex",
+                "exec",
+                prompt,
+                "--profile",
+                run_config.model,
+                "--skip-git-repo-check",
+                "--sandbox",
+                "workspace-write",
+            ],
+            env=process_env,
+        )
         end_time = time.time()
 
         logging.debug(f"Codex execution finished at {end_time}")
@@ -303,11 +400,25 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Path to the serialized RunConfig JSON file.",
     )
+    parser.add_argument(
+        "--docker",
+        action="store_true",
+        help="Run the agent inside a Docker container.",
+    )
+    parser.add_argument(
+        "--docker-image",
+        type=str,
+        default=None,
+        help="Docker image to use for container execution.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if _should_run_in_docker(args) and not _is_running_in_docker():
+        _run_in_docker(args.config, args.docker_image)
+        return
     run_from_config(args.config)
 
 
