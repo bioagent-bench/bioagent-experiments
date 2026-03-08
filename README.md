@@ -1,3 +1,5 @@
+<img width="411" height="123" alt="image" src="https://github.com/user-attachments/assets/93c4b237-bb9f-4e38-b94a-218a093062ad" />
+
 # bioagent-experiments
 
 ## Environment Setup
