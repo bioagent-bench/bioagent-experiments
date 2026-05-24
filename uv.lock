@@ -45,7 +45,6 @@ dependencies = [
     { name = "pandas" },
     { name = "ruff" },
     { name = "seaborn" },
-    { name = "smolagents" },
     { name = "toml" },
     { name = "websocket" },
     { name = "websocket-client" },

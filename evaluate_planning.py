@@ -13,11 +13,13 @@ from pydantic import BaseModel, Field
 from src import models
 from src.dataset import DataSet
 from src.models import MODELS
+from src.openrouter import create_openrouter_client
+from src.paths import BIOAGENT_DATA_ROOT, TASK_METADATA_PATH
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 RUN_LOGS = Path(os.getenv("RUN_LOGS"))
-METADATA_PATH = Path("~/bioagent-bench/src/task_metadata.json").expanduser()
-DATA_ROOT = Path("~/bioagent-data").expanduser()
+METADATA_PATH = TASK_METADATA_PATH
+DATA_ROOT = BIOAGENT_DATA_ROOT
 
 PLAN_SCHEMA = """{
   "task_id": "string",
@@ -124,11 +126,7 @@ def _read_optional_text(path: Path) -> str | None:
 
 
 def create_openai_client() -> OpenAI:
-    api_key_path = PROJECT_ROOT / ".keys" / "openrouter_api.key"
-    api_key = api_key_path.read_text()
-    api_url = PROJECT_ROOT / ".keys" / "openrouter_endpoint.key"
-    api_url = api_url.read_text()
-    return OpenAI(api_key=api_key, base_url=api_url)
+    return create_openrouter_client()
 
 
 def _plan_to_dict(plan: PlanSchema | dict[str, Any]) -> dict[str, Any]:

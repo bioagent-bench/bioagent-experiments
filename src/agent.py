@@ -9,10 +9,16 @@ import subprocess
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Iterator
 
 from otel import sum_token_counts
-from src.mcp_configs import modify_claude_config, modify_codex_config, remove_claude_mcp_config, remove_codex_mcp_config
+from src.mcp_configs import (
+    modify_claude_config,
+    modify_codex_config,
+    remove_claude_mcp_config,
+    remove_codex_mcp_config,
+)
+from src.models import OPENROUTER_CLAUDE_CODE_MODELS, OPENROUTER_CODEX_PROFILES
 from .logs import RunConfig, configure_logging
 from .system_prompts import prompts
 
@@ -94,6 +100,18 @@ def _build_subprocess_env(run_config: RunConfig) -> dict[str, str]:
     env["OTEL_RESOURCE_ATTRIBUTES"] = ",".join(attrs)
 
     return env
+
+
+def _configure_openrouter_claude_env(env: dict[str, str]) -> None:
+    openrouter_api_key = env.get("OPENROUTER_API_KEY")
+    if not openrouter_api_key:
+        raise RuntimeError(
+            "OPENROUTER_API_KEY must be set to run Claude Code through OpenRouter"
+        )
+
+    env["ANTHROPIC_BASE_URL"] = "https://openrouter.ai/api"
+    env["ANTHROPIC_AUTH_TOKEN"] = openrouter_api_key
+    env["ANTHROPIC_API_KEY"] = ""
 
 
 def copy_inputs_to_run_directory(
@@ -178,9 +196,6 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     create_dirs(run_dir_path)
 
-    outputs_root = run_dir_path / "outputs"
-    results_root = run_dir_path / "results"
-
     input_data: list[Path] = []
 
     # create an isolated run environment
@@ -222,8 +237,24 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
         start_time = time.time()
         logging.debug(f"Starting codex execution at {start_time}")
         process_env = _build_subprocess_env(run_config)
-        
-        if run_config.model.startswith("claude"):
+
+        if run_config.model in OPENROUTER_CLAUDE_CODE_MODELS:
+            _configure_openrouter_claude_env(process_env)
+            # this enables the claude mcp server
+            if not run_config.experiment_name.startswith("open-environment"):
+                modify_claude_config(run_config.experiment_name, tools_json)
+            subprocess.run(
+                [
+                    "claude",
+                    "-p",
+                    prompt,
+                    "--model",
+                    OPENROUTER_CLAUDE_CODE_MODELS[run_config.model],
+                    "--dangerously-skip-permissions",
+                ],
+                env=process_env,
+            )
+        elif run_config.model.startswith("claude"):
             # this enables the claude mcp server
             if not run_config.experiment_name.startswith("open-environment"):
                 modify_claude_config(run_config.experiment_name, tools_json)
@@ -247,8 +278,20 @@ def run_agent_task(run_config: RunConfig) -> RunConfig:
                     "--profile",
                     run_config.model,
                     "--skip-git-repo-check",
-                    "--sandbox" 
-                    "workspace-write",
+                    "--yolo",
+                ],
+                env=process_env,
+            )
+        elif run_config.model in OPENROUTER_CODEX_PROFILES:
+            subprocess.run(
+                [
+                    "codex",
+                    "exec",
+                    prompt,
+                    "--profile",
+                    OPENROUTER_CODEX_PROFILES[run_config.model],
+                    "--skip-git-repo-check",
+                    "--yolo",
                 ],
                 env=process_env,
             )

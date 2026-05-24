@@ -17,11 +17,12 @@ import click
 
 from src.dataset import DataSet
 from src.logs import RunConfig, configure_logging
+from src.paths import BIOAGENT_DATA_ROOT, TASK_METADATA_PATH
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DATA_ROOT = Path("~/bioagent-data").expanduser()
-METADATA_PATH = Path("~/bioagent-bench/src/task_metadata.json").expanduser()
+DATA_ROOT = BIOAGENT_DATA_ROOT
+METADATA_PATH = TASK_METADATA_PATH
 
 OTEL_SINK_HOST = "127.0.0.1:4317"
 REQUIRED_ENV_VARS = ("RUN_LOGS",)

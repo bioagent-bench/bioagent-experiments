@@ -12,20 +12,21 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.judge_agent import EvaluationResults, EvaluationResultsGiab, EvaluationResultsGiabSchema, EvaluationResultsSchema, build_judge_prompt_csv, build_judge_prompt_giab, eval_giab_metrics, parse_agent_outputs, parse_agent_results
 from src.logs import RunConfig, configure_logging
+from src.openrouter import create_openrouter_client
 
 configure_logging()
 
-api_key_path = PROJECT_ROOT / ".keys" / "openrouter_api.key"
-openai_api_key = api_key_path.read_text()
-openai_api_url = PROJECT_ROOT / ".keys" / "openrouter_endpoint.key"
-openai_api_url = openai_api_url.read_text()
+openai_client: OpenAI | None = None
 
-openai_client = OpenAI(
-    api_key=openai_api_key, 
-    base_url=openai_api_url
-    )
+
+def get_openai_client() -> OpenAI:
+    global openai_client
+    if openai_client is None:
+        openai_client = create_openrouter_client()
+    return openai_client
 
 def run_eval(run_config: RunConfig):
+    client = get_openai_client()
     agent_output_tree = parse_agent_outputs(run_config.run_dir_path / "outputs")
 
     if run_config.use_reference_data:
@@ -60,7 +61,7 @@ def run_eval(run_config: RunConfig):
             results=agent_results,
             task_id=run_config.task_id,
         )
-        response = openai_client.responses.parse(
+        response = client.responses.parse(
             model="openai/gpt-5.1",
             reasoning={"effort": "medium"},
             text_format=EvaluationResultsGiabSchema,
@@ -88,7 +89,7 @@ def run_eval(run_config: RunConfig):
             truth=truth_results,
             task_id=run_config.task_id,
         )
-        response = openai_client.responses.parse(
+        response = client.responses.parse(
             model="openai/gpt-5.1",
             reasoning={"effort": "medium"},
             text_format=EvaluationResultsGiabSchema,

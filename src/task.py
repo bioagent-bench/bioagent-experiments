@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import json
 
+from src.paths import BIOAGENT_DATA_ROOT, TASK_METADATA_PATH
+
 
 @dataclass
 class DownloadItem:
@@ -60,8 +62,8 @@ def _as_task(obj: Dict, path_map: Optional[Dict[str, Path]] = None) -> Task:
 
 
 def load_tasks(
-    metadata_path: Path = Path("~/bioagent-bench/src/task_metadata.json").expanduser(),
-    data_root: Path = Path("~/bioagent-data").expanduser(),
+    metadata_path: Path = TASK_METADATA_PATH,
+    data_root: Path = BIOAGENT_DATA_ROOT,
 ) -> List[Task]:
     tasks_raw = json.loads(Path(metadata_path).read_text())
     path_map: Dict[str, Path] = {
@@ -75,5 +77,4 @@ def get_task_by_id(task_id: str, **kwargs) -> Optional[Task]:
         if task.task_id == task_id:
             return task
     return None
-
 

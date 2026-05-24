@@ -1,5 +1,6 @@
 """Quick test suite to test codex command with different model profiles."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -8,7 +9,31 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.models import MODELS
+from src.models import (
+    MODELS,
+    OPENROUTER_CLAUDE_CODE_MODELS,
+    OPENROUTER_CODEX_PROFILES,
+)
+
+CLAUDE_CODE_MODEL_ALIASES = {
+    "claude-opus-4-5": "claude-opus-4-5",
+    "claude-sonnet-4-5": "claude-sonnet-4-5",
+}
+
+
+def build_claude_openrouter_env() -> dict[str, str]:
+    env = os.environ.copy()
+    openrouter_api_key = env.get("OPENROUTER_API_KEY")
+    if not openrouter_api_key:
+        raise RuntimeError(
+            "OPENROUTER_API_KEY must be set to test Claude Code through OpenRouter"
+        )
+
+    env["ANTHROPIC_BASE_URL"] = "https://openrouter.ai/api"
+    env["ANTHROPIC_AUTH_TOKEN"] = openrouter_api_key
+    env["ANTHROPIC_API_KEY"] = ""
+
+    return env
 
 
 def test_codex_command(model: str) -> Tuple[bool, int, str, str]:
@@ -22,16 +47,28 @@ def test_codex_command(model: str) -> Tuple[bool, int, str, str]:
         Tuple of (success: bool, return_code: int, stdout: str, stderr: str)
     """
 
-    if model == "claude-opus-4-5" or model == "claude-sonnet-4-5":
+    env = os.environ.copy()
+
+    if model in OPENROUTER_CLAUDE_CODE_MODELS:
         command = [
             "claude",
             "-p",
             "Hello",
             "--model",
-            model,
+            OPENROUTER_CLAUDE_CODE_MODELS[model],
             "--dangerously-skip-permissions",
         ]
-    elif model == "gpt-5-1-codex-max" or model == "gpt-5-2":
+        env = build_claude_openrouter_env()
+    elif model in CLAUDE_CODE_MODEL_ALIASES:
+        command = [
+            "claude",
+            "-p",
+            "Hello",
+            "--model",
+            CLAUDE_CODE_MODEL_ALIASES[model],
+            "--dangerously-skip-permissions",
+        ]
+    elif model.startswith("gpt"):
         command = [
             "codex",
             "exec",
@@ -42,20 +79,35 @@ def test_codex_command(model: str) -> Tuple[bool, int, str, str]:
             "--yolo",
         ]
 
-    elif model.startswith("openrouter/"):
+    elif model in OPENROUTER_CODEX_PROFILES:
         command = [
-            "opencode",
-            "run",
+            "codex",
+            "exec",
             "Hello",
-            "--model",
-            model,
+            "--profile",
+            OPENROUTER_CODEX_PROFILES[model],
+            "--skip-git-repo-check",
+            "--yolo",
         ]
+
+    # elif model.startswith("openrouter/"):
+    #     command = [
+    #         "opencode",
+    #         "run",
+    #         "Hello",
+    #         "--model",
+    #         model,
+    #     ]
+    else:
+        return False, 1, "", f"No configured test command for model: {model}"
+
     try:
         result = subprocess.run(
             command,
             capture_output=True,
             text=True,
             check=False,
+            env=env,
         )
         print(result.stdout)
         success = result.returncode == 0
