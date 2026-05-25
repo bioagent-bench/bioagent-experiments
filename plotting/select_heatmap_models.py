@@ -19,7 +19,7 @@ SELECTED_MODELS = [
     "openrouter/qwen/qwen3.6-27b",
 ]
 
-DEFAULT_TASK_LIMIT = 5
+DEFAULT_TASK_LIMIT = 0
 
 
 def parse_args():
@@ -46,13 +46,13 @@ def parse_args():
         "--task-id",
         action="append",
         default=[],
-        help="Task ID to include. Can be provided multiple times. Defaults to the first five tasks.",
+        help="Task ID to include. Can be provided multiple times. Defaults to all tasks.",
     )
     parser.add_argument(
         "--task-limit",
         type=int,
         default=DEFAULT_TASK_LIMIT,
-        help="Number of tasks to include when --task-id is not provided. Use 0 to include all tasks.",
+        help="Number of tasks to include when --task-id is not provided. Defaults to all tasks.",
     )
     return parser.parse_args()
 

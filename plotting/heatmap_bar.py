@@ -61,6 +61,12 @@ def parse_args():
         nargs="*",
         help="Optional model IDs to plot. Defaults to the paper model set when present, otherwise all columns.",
     )
+    parser.add_argument(
+        "--rows",
+        choices=["models", "tasks"],
+        default="models",
+        help="Whether heatmap rows should be models or tasks.",
+    )
     parser.add_argument("--show", action="store_true", help="Display the plot window after saving.")
     return parser.parse_args()
 
@@ -74,31 +80,40 @@ if __name__ == "__main__":
 
     df = pd.read_csv(args.input_csv)
     df.set_index("task_id", inplace=True)
-    df = df.T
 
     if args.models:
         best_models = args.models
     else:
-        default_models = [model for model in DEFAULT_MODELS if model in df.index]
-        best_models = default_models or df.index.tolist()
+        default_models = [model for model in DEFAULT_MODELS if model in df.columns]
+        best_models = default_models or df.columns.tolist()
 
-    missing_models = [model for model in best_models if model not in df.index]
+    missing_models = [model for model in best_models if model not in df.columns]
     if missing_models:
         print(f"Skipping missing models: {', '.join(missing_models)}")
-    best_models = [model for model in best_models if model in df.index]
+    best_models = [model for model in best_models if model in df.columns]
     if not best_models:
         raise ValueError("No requested models were found in the input CSV.")
 
-    df = df.loc[best_models]
-    averages = df.mean(axis=1)
+    df = df[best_models]
+    if args.rows == "models":
+        df = df.T
+        averages = df.mean(axis=1)
 
-    # Sort models by their average completion rate (descending) and re-index df/averages accordingly
-    sorted_idx = averages.sort_values(ascending=False).index
-    df = df.loc[sorted_idx]
-    averages = averages.loc[sorted_idx]
-    best_models = list(sorted_idx)
+        # Sort models by their average completion rate (descending) and re-index df/averages accordingly
+        sorted_idx = averages.sort_values(ascending=False, kind="mergesort").index
+        df = df.loc[sorted_idx]
+        averages = averages.loc[sorted_idx]
+        row_labels = [display_label(model) for model in df.index]
+        x_label = "Task"
+        y_label = "Model"
+    else:
+        averages = df.mean(axis=1)
+        row_labels = df.index.tolist()
+        df.columns = [display_label(model) for model in df.columns]
+        x_label = "Model"
+        y_label = "Task"
 
-    df.index = [display_label(model) for model in df.index]
+    df.index = row_labels
 
     print(df)
 
@@ -108,13 +123,13 @@ if __name__ == "__main__":
 
     row_count, column_count = df.shape
     axis_fontsize = 24
-    tick_fontsize = 22 if column_count <= 9 else 19
-    annot_fontsize = 20 if column_count <= 9 else 16
+    tick_fontsize = 22 if max(row_count, column_count) <= 9 else 19
+    annot_fontsize = 20 if max(row_count, column_count) <= 9 else 16
     bar_value_fontsize = 22 if row_count <= 10 else 18
 
     # Create figure with 2 subplots: heatmap on left, horizontal bar chart on right
-    fig_width = max(9, 0.82 * column_count + 3.8)
-    fig_height = max(6, 0.62 * row_count + 2.2)
+    fig_width = max(9, 1.08 * column_count + 3.8)
+    fig_height = max(6, 0.56 * row_count + 2.4)
     fig, (ax_heat, ax_bar) = plt.subplots(1, 2, figsize=(fig_width, fig_height),
                                            gridspec_kw={'width_ratios': [3, 1], 'wspace': 0.01})
 
@@ -123,12 +138,12 @@ if __name__ == "__main__":
                 cbar=False,
                 linewidths=0.5, linecolor='white',
                 annot_kws={'fontsize': annot_fontsize, 'fontfamily': 'Linux Libertine O', 'color': 'black'},
-                square=True,
+                square=False,
                 vmin=0, vmax=100)
 
     # Style heatmap
-    ax_heat.set_xlabel("Task", fontsize=axis_fontsize, fontfamily="Linux Libertine O", color='black')
-    ax_heat.set_ylabel("Model", fontsize=axis_fontsize, fontfamily="Linux Libertine O", color='black')
+    ax_heat.set_xlabel(x_label, fontsize=axis_fontsize, fontfamily="Linux Libertine O", color='black')
+    ax_heat.set_ylabel(y_label, fontsize=axis_fontsize, fontfamily="Linux Libertine O", color='black')
 
     # Set tick labels
     ax_heat.set_xticklabels(df.columns, fontsize=tick_fontsize, fontfamily="Linux Libertine O", rotation=45, ha='right', color='black')
@@ -136,7 +151,7 @@ if __name__ == "__main__":
     ax_heat.tick_params(colors='black', length=0)
 
     # Plot horizontal bar chart - bars aligned with heatmap rows
-    bar_positions = np.arange(len(best_models)) + 0.5  # Center bars on heatmap cells
+    bar_positions = np.arange(row_count) + 0.5  # Center bars on heatmap cells
 
     # Color bars based on average using the same colormap
     max_avg = 100
@@ -150,7 +165,7 @@ if __name__ == "__main__":
     ax_bar.spines['left'].set_visible(True)
     ax_bar.spines['left'].set_color('black')
     ax_bar.spines['bottom'].set_color('black')
-    ax_bar.set_ylim(len(best_models), 0)  # Invert to match heatmap row order
+    ax_bar.set_ylim(ax_heat.get_ylim())
     ax_bar.set_yticks([])
     ax_bar.set_xlabel("Average", fontsize=axis_fontsize, fontfamily="Linux Libertine O", color='black')
     ax_bar.set_xlim(0, 100)
