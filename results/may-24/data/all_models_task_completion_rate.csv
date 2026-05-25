@@ -1,0 +1,11 @@
+task_id,openrouter/anthropic/claude-opus-4.7,openrouter/openai/gpt-5.5,openrouter/moonshotai/kimi-k2.6,openrouter/deepseek/deepseek-v4-pro,openrouter/qwen/qwen3.7-max,openrouter/qwen/qwen3.6-27b,openrouter/,openrouter/openai/gpt-5.1
+alzheimer-mouse,100.0,100.0,100.0,0.0,75.0,50.0,0.0,100.0
+comparative-genomics,100.0,100.0,0.0,0.0,80.0,20.0,0.0,25.0
+cystic-fibrosis,100.0,100.0,100.0,100.0,100.0,100.0,,100.0
+deseq,100.0,100.0,0.0,0.0,75.0,0.0,,0.0
+evolution,100.0,100.0,100.0,0.0,100.0,0.0,,0.0
+giab,100.0,80.0,0.0,83.33333333333334,100.0,100.0,,80.0
+metagenomics,100.0,100.0,0.0,0.0,100.0,50.0,,75.0
+single-cell,100.0,100.0,100.0,0.0,0.0,100.0,,100.0
+transcript-quant,100.0,100.0,100.0,100.0,100.0,33.33333333333333,,100.0
+viral-metagenomics,80.0,100.0,80.0,0.0,100.0,0.0,,0.0

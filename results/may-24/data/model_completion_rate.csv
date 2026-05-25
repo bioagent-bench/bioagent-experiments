@@ -1,0 +1,9 @@
+model,completion_rate
+openrouter/anthropic/claude-opus-4.7,98.00000000000001
+openrouter/openai/gpt-5.5,98.00000000000001
+openrouter/moonshotai/kimi-k2.6,57.99999999999999
+openrouter/deepseek/deepseek-v4-pro,28.333333333333332
+openrouter/qwen/qwen3.7-max,83.0
+openrouter/qwen/qwen3.6-27b,45.33333333333333
+openrouter/,0.0
+openrouter/openai/gpt-5.1,57.99999999999999
