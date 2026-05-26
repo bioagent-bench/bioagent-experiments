@@ -14,7 +14,7 @@ DEFAULT_INPUTS = [
 SELECTED_MODELS = [
     "openrouter/openai/gpt-5.5",
     "openrouter/anthropic/claude-opus-4.7",
-    "openrouter/google/gemini-3-pro-preview",
+    "gpt-gemini",
     "openrouter/qwen/qwen3.7-max",
     "openrouter/qwen/qwen3.6-27b",
 ]

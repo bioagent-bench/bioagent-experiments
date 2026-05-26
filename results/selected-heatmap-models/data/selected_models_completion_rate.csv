@@ -1,6 +1,6 @@
 model,completion_rate
 openrouter/openai/gpt-5.5,98.0
 openrouter/anthropic/claude-opus-4.7,98.0
+gpt-gemini,96.57142857142858
 openrouter/qwen/qwen3.7-max,83.0
-openrouter/google/gemini-3-pro-preview,67.97619047619048
 openrouter/qwen/qwen3.6-27b,45.33333333333333
