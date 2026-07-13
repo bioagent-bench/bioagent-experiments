@@ -11,6 +11,8 @@ artifacts/
 outputs/
 
 # Local benchmark data and historical run logs
+/data
+/reference
 run-logs/
 runs-*/
 test_outputs/
