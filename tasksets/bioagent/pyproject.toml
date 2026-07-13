@@ -1,0 +1,16 @@
+[project]
+name = "bioagent-taskset"
+version = "0.1.0"
+description = "BioAgent benchmark tasks for Verifiers v1."
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "bioagent-judge",
+    "verifiers==0.2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bioagent_taskset"]
