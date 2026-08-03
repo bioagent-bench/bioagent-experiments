@@ -1,85 +1,98 @@
 <img width="411" height="123" alt="image" src="https://github.com/user-attachments/assets/93c4b237-bb9f-4e38-b94a-218a093062ad" />
 
-# bioagent-experiments
+# BioAgent experiments
 
-## Environment Setup
+BioAgent evaluations now use the Verifiers v1 API introduced in `verifiers==0.2.0`.
+The repository is a small workspace of composable packages:
 
-All experiments execute inside Docker containers. Host-side scripts still orchestrate runs,
-but the agent itself always runs in Docker.
-
-## Requirements
-### Miniforge installation for mamba
-https://github.com/conda-forge/miniforge
-
-### Codex
-```bash
-npm i -g @openai/codex
+```text
+configs/eval/          complete evaluation recipes
+harnesses/codex/       how Codex runs a task
+harnesses/opencode/    how OpenCode runs a task
+judges/pipeline/       typed pipeline assessment
+tasksets/bioagent/     data, setup, artifacts, and scoring
 ```
 
-### uv package manager
-curl -LsSf https://astral.sh/uv/install.sh | sh
+The taskset is independent of Codex. The harness is independent of BioAgent data. Verifiers owns
+the runtime lifecycle, API interception, traces, usage accounting, concurrency, timeouts, retries,
+and cleanup.
 
 ## Setup
-1. The project is run through uv package manager
+
+Requirements:
+
+- Python 3.13 and [uv](https://docs.astral.sh/uv/)
+- `OPENROUTER_API_KEY` for the supplied evaluation and judge endpoint
+- BioAgent Bench metadata and downloaded task data
+- `mamba` only when running tasks that install Conda packages; the `hap` environment is required
+  for GIAB scoring
+
+Install the workspace:
+
 ```bash
 uv sync
 ```
 
-2. Define where you want to store the run logs
-```bash
-export RUN_LOGS=/home/user/run_logs/
-```
-```bash
-export AZURE_OPENAI_API_KEY=""
-export ANTHROPIC_FOUNDRY_API_KEY=""
-```
+The default paths are `~/dev/bioagent-bench/src/task_metadata.json` and
+`~/dev/bioagent-data`. Edit [configs/eval/codex.toml](configs/eval/codex.toml), override its dotted
+fields on the command line, or set `BIOAGENT_BENCH_ROOT`, `BIOAGENT_DATA_ROOT`, and
+`BIOAGENT_TASK_METADATA_PATH` before loading a config that omits those path fields.
 
-4. Install a mamba/micromamba installation to run bioinformatics-mcp from the agent
-5. Install an isolated hap.py mamba environment to run germline variant calling bnechmarking
+## Run
+
+Validate package resolution and the full typed configuration without starting a rollout:
+
 ```bash
-mamba create --name hap hap.py
+uv run eval @ configs/eval/codex.toml --dry-run
 ```
 
+Run the configured evaluation:
 
-## Canonical run
-1. run_evals.py
 ```bash
-python run_evals.py --suite open --reference-mode with
+uv run eval @ configs/eval/codex.toml
 ```
 
-2. src/eval.py
-3. evaluate_run_db.py
+Run the pinned OpenCode recipe (configured for one cystic-fibrosis rollout with GLM 5.2):
 
-## Docker (required)
-Build the image once:
 ```bash
-docker build -t bioagent-experiments:latest .
+uv run eval @ configs/eval/opencode.toml
 ```
 
-Run the agent (Docker is always used):
+For a smoke test, select one task and limit the run:
+
 ```bash
-python -m src.agent --config /path/to/run.json --docker-image bioagent-experiments:latest
+uv run eval @ configs/eval/codex.toml \
+  --taskset.task-id transcript-quant \
+  --num-tasks 1
 ```
 
-Or via environment variables:
+Set `--taskset.include-reference false` to evaluate without reference resources. CLI values
+override TOML values.
+
+Verifiers writes the resolved config, trace records, and logs under `outputs/`. Before a runtime is
+removed, the taskset copies final deliverables to `artifacts/<task-id>/<trace-id>/results/`. The
+trace also contains the generated artifact tree, typed judge assessment, rewards, metrics, model
+usage, judge usage, timings, and errors.
+
+## Runtimes
+
+The supplied config uses the subprocess runtime and stages already-downloaded inputs with symlinks.
+This is fast for local experiments but gives the agent host access. To use Docker or Prime
+sandboxes, set `taskset.staging = "download"` and select the corresponding
+`harness.runtime.type`; each isolated runtime then downloads its task inputs from the benchmark
+metadata.
+
+## Development
+
 ```bash
-BIOAGENT_DOCKER_IMAGE=bioagent-experiments:latest \\
-  python -m src.agent --config /path/to/run.json
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
 ```
 
-If you use an OTEL sink running on the host, the container defaults to
-`host.docker.internal:4317`. Override with `BIOAGENT_OTEL_HOST` if needed.
+Historical charts, result tables, and their analysis helpers remain in `results/`, `plotting/`, and
+`utils/`. Install their optional dependencies with `uv sync --group analysis`.
 
-After each run, the agent automatically triggers three ablations in separate Docker
-containers: prompt-bloat, decoy, and corrupt.
-
-## Run tests for models
-You can run this before running experiments to check if model connections work
-```bash
-python test_coding_framework_configs.py 
-```
-
-
-## Ablation
-Type-1 = Corrupt
-Type-2 = Decoy
+Architecture and APIs follow the [Verifiers v1 launch
+post](https://www.primeintellect.ai/blog/verifiers-v1) and the [v1
+documentation](https://docs.primeintellect.ai/verifiers/v1/overview).

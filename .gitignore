@@ -1,28 +1,29 @@
-api.key
-endpoint.key
-fibrosis/data/
-src/smolagents
-deseq/data/
-evolution/data
-comparative/data
-metagenomics/data
-*.pyc
-
-deseq/outputs
-comparative/outputs
-evolution/outputs
-fibrosis/outputs
-metagenomics/outputs
-
-.keys/
-test_outputs/
-run-logs/*
-
-node_modules/
-
-ablation/
-
-runs-*
-stability-results
-plan_evals/
 .DS_Store
+.keys/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Verifiers evaluation and exported task artifacts
+artifacts/
+outputs/
+
+# Local benchmark data and historical run logs
+/data
+/reference
+run-logs/
+runs-*/
+test_outputs/
+plan_evals/
+stability-results/
+
+# Large generated ablation datasets (tracked generator sources are unaffected)
+ablation/corrupt/
+ablation/decoy/
+
+# Local secrets
+*.key
+.env
+.env.*

@@ -1,0 +1,13 @@
+[project]
+name = "bioagent-judge"
+version = "0.1.0"
+description = "Typed pipeline-progress judge for BioAgent benchmark tasks."
+requires-python = ">=3.13,<3.14"
+dependencies = ["verifiers==0.2.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bioagent_judge"]
