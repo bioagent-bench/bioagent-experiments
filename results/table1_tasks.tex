@@ -1,0 +1,101 @@
+% ---------------------------------------------------------------------------
+% Preamble requirements (add once, alongside your existing packages):
+%
+%   \usepackage{graphicx}
+%   \usepackage{tikz}
+%   \usepackage{xcolor}
+%   \usepackage{booktabs}
+%   \graphicspath{{figures/tasks_trimmed/}{figures/languages/}}
+%
+%   \definecolor{yesgreen}{HTML}{A5D68F}
+%   \definecolor{nogray}{HTML}{E3E3E3}
+%
+%   % ---- vertical metrics -------------------------------------------------
+%   % \rowscale sets the data-row height (as a multiple of \baselineskip) and
+%   % drives the artwork size, so the two stay in proportion.
+%   % The icons are centred on \iconaxis, the optical centre of the running
+%   % text (midway between the cap height and the descender depth). The status
+%   % dots are NOT: they are treated as glyphs and sit on the baseline (see
+%   % below). \arraystretch is deliberately left alone so the header row keeps
+%   % its natural height; only the data rows are padded, by \rowstrut.
+%   \newcommand{\rowscale}{1.9}
+%   \newlength{\capht}\newlength{\dsc}\newlength{\iconaxis}
+%   \newlength{\rowh}\newlength{\statusdiam}
+%
+%   % Call once inside the table, after the body font is fixed (e.g. \small).
+%   \newcommand{\setrowmetrics}{%
+%     \settoheight{\capht}{X}%
+%     \settodepth{\dsc}{y}%
+%     \setlength{\iconaxis}{\dimexpr(\capht-\dsc)/2\relax}%
+%     \setlength{\rowh}{\rowscale\baselineskip}%
+%   }
+%
+%   % Invisible strut that makes a data row \rowh tall, centred on \iconaxis.
+%   \newcommand{\rowstrut}{%
+%     \rule[\dimexpr\iconaxis-0.5\rowh\relax]{0pt}{\rowh}%
+%   }
+%
+%   % Centre any box on \iconaxis.
+%   \newcommand{\vcentered}[1]{%
+%     \raisebox{\dimexpr\iconaxis-0.5\height\relax}{#1}%
+%   }
+%
+%   % ---- status dots ------------------------------------------------------
+%   % The dots are treated as part of the text, NOT as row artwork: the
+%   % diameter is measured from the label each time, so it always equals the
+%   % text height, and the dot sits on the baseline exactly like a glyph.
+%   % Deliberately independent of \rowh -- it tracks the font size, not the row.
+%   % \DeclareRobustCommand (not \newcommand): these contain a tikzpicture, and
+%   % \yes/\no are used inside \caption{} in the robustness table, which is a
+%   % moving argument -- a fragile version breaks the build there.
+%   \DeclareRobustCommand{\statusdot}[1]{%
+%     \settoheight{\statusdiam}{Yes}%
+%     \tikz[baseline=0pt]{\fill[#1] (0,0.5\statusdiam) circle (0.5\statusdiam);}%
+%   }
+%   \DeclareRobustCommand{\yes}{\statusdot{yesgreen}\,Yes}
+%   \DeclareRobustCommand{\no}{\statusdot{nogray}\,No}
+%
+%   % ---- inline logos -----------------------------------------------------
+%   % Sized by HEIGHT ONLY so every icon shares one height (the artwork is
+%   % pre-trimmed of transparent padding, so this is a true ink height). The
+%   % fixed-width slot is wide enough for the widest aspect ratio (1.81), which
+%   % keeps the column tidy and the icons centred under the header.
+%   \newcommand{\inlineicon}[3]{%
+%     \makebox[#2][c]{\vcentered{\includegraphics[height=#3]{#1}}}%
+%   }
+%   \newcommand{\taskicon}[1]{\inlineicon{#1.png}{1.58\rowh}{0.85\rowh}}
+%   \newcommand{\langicon}[1]{\inlineicon{#1.pdf}{0.85\rowh}{0.70\rowh}}
+%
+%   \newcommand{\langpython}{\langicon{python}\,Python}
+%   \newcommand{\langr}{\langicon{rstudio}\,R}
+%   \newcommand{\langbash}{\langicon{bash}\,bash}
+%
+% Assets: task icons     -> plotting/assets/tasks_trimmed/<task-id>.png
+%         (transparent margins trimmed, so all icons share a true ink height)
+%         language logos -> plotting/assets/languages/{python,rstudio,bash}.pdf
+%         (vector PDFs, converted from the upstream SVGs)
+% ---------------------------------------------------------------------------
+
+\begin{table*}[t]
+\centering
+\caption{An overview of BioAgent Bench tasks and their key properties: language of the reference implementation (\textbf{Language}), whether the task requires interactions with tools (\textbf{Tool calls}), and whether its outputs can be scored as a binary outcome (\textbf{Verifiable}).}
+\label{tab:bioagent_tasks}
+\small
+\setrowmetrics
+\begin{tabular}{llllll}
+\toprule
+\textbf{Icon} & \textbf{Identifier} & \textbf{Name} & \textbf{Language} & \textbf{Tool calls} & \textbf{Verifiable} \\
+\midrule
+\rowstrut\taskicon{alzheimer-mouse} & \texttt{alzheimer-mouse} & Alzheimer Mouse Models: Comparative Pathway Analysis & \langpython & \no & \no \\
+\rowstrut\taskicon{comparative-genomics} & \texttt{comparative-genomics} & Comparative Genomics: Co-evolving Gene Clusters & \langr & \no & \no \\
+\rowstrut\taskicon{cystic-fibrosis} & \texttt{cystic-fibrosis} & Cystic Fibrosis Mendelian Variant Identification & \langbash & \yes & \yes \\
+\rowstrut\taskicon{deseq} & \texttt{deseq} & RNA-Seq Differential Expression (DESeq2) & \langpython & \yes & \no \\
+\rowstrut\taskicon{evolution} & \texttt{evolution} & Experimental Evolution Variant Calling (E. coli) & \langbash & \yes & \no \\
+\rowstrut\taskicon{giab} & \texttt{giab} & GIAB Variant Calling (NA12878) & \langbash & \yes & \yes \\
+\rowstrut\taskicon{metagenomics} & \texttt{metagenomics} & Metagenomics: Community Comparison (Cuatro Cienegas) & \langr & \yes & \no \\
+\rowstrut\taskicon{single-cell} & \texttt{single-cell} & Single-cell RNA-seq: Skeletal Muscle Exercise Response & \langpython & \no & \no \\
+\rowstrut\taskicon{transcript-quant} & \texttt{transcript-quant} & Transcript Quantification (Simulated RNA-Seq) & \langbash & \yes & \yes \\
+\rowstrut\taskicon{viral-metagenomics} & \texttt{viral-metagenomics} & Viral Metagenomics: Species Identification (Dolphin) & \langbash & \yes & \yes \\
+\bottomrule
+\end{tabular}
+\end{table*}

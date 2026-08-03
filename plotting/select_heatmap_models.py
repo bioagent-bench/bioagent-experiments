@@ -11,12 +11,20 @@ DEFAULT_INPUTS = [
     "results/data/all_models_task_completion_rate.csv",
 ]
 
+# Paper Figure 2 model set, with each family swapped to its most recent
+# counterpart when newer results are available (results/may-24). Families with
+# no newer result keep the original paper model.
 SELECTED_MODELS = [
-    "openrouter/openai/gpt-5.5",
-    "openrouter/anthropic/claude-opus-4.7",
-    "gpt-gemini",
-    "openrouter/qwen/qwen3.7-max",
-    "openrouter/qwen/qwen3.6-27b",
+    "openrouter/anthropic/claude-opus-4.7",  # was claude-opus-4-5
+    "gpt-gemini",                            # gemini-3-pro-preview (no newer)
+    "gpt-sonnet",                            # claude-sonnet-4-5 (no newer)
+    "openrouter/openai/gpt-5.5",             # was gpt-5-2
+    "openrouter/openai/gpt-5.2",             # was gpt-5-1
+    "openrouter/moonshotai/kimi-k2.6",       # was kimi-k2-thinking
+    "openrouter/z-ai/glm-4.7",               # glm-4.7 (no newer)
+    "openrouter/minimax/minimax-m2.1",       # minimax-m2.1 (no newer)
+    "openrouter/qwen/qwen3.7-max",           # was qwen3-coder
+    "openrouter/mistralai/devstral-2512:free",  # devstral-2512 (no newer)
 ]
 
 DEFAULT_TASK_LIMIT = 0

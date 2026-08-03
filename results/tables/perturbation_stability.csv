@@ -1,0 +1,11 @@
+task_id,corrupted,decoy_avoided,delta_completion,jaccard,pearson
+alzheimer-mouse,no,yes,-12.5,0.160,0.219
+comparative-genomics,no,no,-20.0,0.004,NA
+cystic-fibrosis,no,yes,0.0,1.000,NA
+deseq,yes,yes,-100.0,0.978,0.995
+evolution,yes,yes,75.0,0.000,NA
+giab,yes,yes,-20.0,NA,NA
+metagenomics,yes,no,-100.0,0.395,0.746
+single-cell,yes,yes,-100.0,0.114,0.395
+transcript-quant,yes,yes,0.0,1.000,1.000
+viral-metagenomics,yes,yes,0.0,0.667,1.000
