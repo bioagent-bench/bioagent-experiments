@@ -41,13 +41,14 @@ DEFAULT_MODELS = [
     'openrouter/mistralai/devstral-2512:free',
     'openrouter/moonshotai/kimi-k2-thinking',
     'openrouter/qwen/qwen3-coder:free',
-    'openrouter/z-ai/glm-4.7',
+    'gpt-glm',
     'openrouter/minimax/minimax-m2.1',
 ]
 
 # Human-facing model names (real product names, not run identifiers).
 MODEL_LABELS = {
-    'gpt-5-1-codex-max': 'GPT-5.1',
+    'gpt-5-1': 'GPT-5.1',
+    'gpt-5-1-codex-max': 'GPT-5.1-Codex-Max',
     'gpt-5-2': 'GPT-5.2',
     'gpt-gemini': 'Gemini 3 Pro',
     'gpt-opus': 'Claude Opus 4.5',
@@ -56,6 +57,7 @@ MODEL_LABELS = {
     'openrouter/moonshotai/kimi-k2-thinking': 'Kimi K2 Thinking',
     'openrouter/qwen/qwen3-coder:free': 'Qwen3 Coder',
     'openrouter/z-ai/glm-4.7': 'GLM-4.7',
+    'gpt-glm': 'GLM-4.7',
     'openrouter/minimax/minimax-m2.1': 'MiniMax M2.1',
     'openrouter/openai/gpt-5.5': 'GPT-5.5',
     'openrouter/openai/gpt-5.2': 'GPT-5.2',
@@ -94,12 +96,12 @@ def provider_for(model_id: str) -> str | None:
         return "gemini"
     if any(k in m for k in ("opus", "sonnet", "claude", "anthropic")):
         return "anthropic"
+    if any(k in m for k in ("glm", "z-ai", "zhipu", "chatglm")):
+        return "zai"
     if any(k in m for k in ("gpt", "openai", "codex")):
         return "openai"
     if any(k in m for k in ("kimi", "moonshot")):
         return "moonshot"
-    if any(k in m for k in ("glm", "z-ai", "zhipu", "chatglm")):
-        return "zai"
     if "minimax" in m:
         return "minimax"
     if "qwen" in m:
