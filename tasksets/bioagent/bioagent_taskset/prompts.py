@@ -32,23 +32,27 @@ RESULT_RULES = {
     ),
     "evolution": (
         "results_match is true only if at least one chromosome/CHROM and position/POS pair "
-        "matches the expected variants."
+        "(canonicalizing SPAdes NODE_<idx>_length_<L>_cov_<float> headers by contig length when "
+        "alleles match) matches the expected variants."
     ),
     "giab": "results_match is true only if the hap.py SNP F1 score is greater than 0.7.",
     "metagenomics": (
         "results_match is true only if the most abundant phylum is Pseudomonadota when comparing "
-        "JP4D and JC1A and at least two additional OTUs have the expected Phylum labels."
+        "JP4D and JC1A, at least two additional expected phyla overlap (by (OTU, Phylum) or "
+        "phylum name), and relative abundances agree quantitatively with the expected results."
     ),
     "single-cell": (
         "results_match is true only if at least one (cluster_id, predicted_cell_type) pair "
         "matches the expected results."
     ),
     "transcript-quant": (
-        "results_match is true only if the complete transcript_id to count mapping equals the "
-        "expected mapping; row order and formatting may differ."
+        "results_match is true only if non-zero transcript counts match the expected mapping "
+        "exactly or within tight EM quantification tolerances; zero-count rows, row order, and "
+        "formatting may differ."
     ),
     "viral-metagenomics": (
-        "results_match is true only if Bottlenose dolphin adenovirus 1 is explicitly reported "
-        "under the Viruses domain."
+        "results_match is true only if Bottlenose dolphin adenovirus 1 (or its ICTV synonyms "
+        "Dolphin mastadenovirus B / Mastadenovirus delphini) is explicitly reported as a "
+        "dominant positive hit under the Viruses domain."
     ),
 }
